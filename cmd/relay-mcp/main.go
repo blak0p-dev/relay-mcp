@@ -13,6 +13,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -25,9 +26,13 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintf(os.Stderr, "relay-mcp: %v\n", err)
+		writeError(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+func writeError(w io.Writer, err error) {
+	fmt.Fprintf(w, "relay: %v\n", err)
 }
 
 // run is the testable body of main: it wires the registry, the MCP server,

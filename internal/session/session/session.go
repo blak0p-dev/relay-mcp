@@ -97,9 +97,7 @@ func New(cmd *exec.Cmd, pty *os.File) *Session {
 		outputCancel: make(chan struct{}),
 		outputDone:   make(chan struct{}),
 		waitDone:     make(chan struct{}),
-		signalGroup: func(pgid int, signal syscall.Signal) error {
-			return syscall.Kill(-pgid, signal)
-		},
+		signalGroup:  signalProcessGroup,
 	}
 }
 
@@ -164,7 +162,7 @@ func (s *Session) readOutput() {
 }
 
 func isTerminalReadEnd(err error) bool {
-	return errors.Is(err, io.EOF) || errors.Is(err, syscall.EIO)
+	return errors.Is(err, io.EOF) || isPlatformTerminalReadEnd(err)
 }
 
 func (s *Session) finishOutputAfterExit() {
@@ -282,7 +280,7 @@ func (s *Session) Shutdown(grace time.Duration) (CloseResult, error) {
 	if pid == 0 {
 		pid = s.Cmd.Process.Pid
 	}
-	if err := s.signalGroup(pid, syscall.SIGTERM); err != nil {
+	if err := s.signalGroup(pid, terminateSignal()); err != nil {
 		return s.failShutdown(result, fmt.Errorf("terminate process group %d: %w", pid, err))
 	}
 	waitDone := make(chan error, 1)
@@ -293,7 +291,7 @@ func (s *Session) Shutdown(grace time.Duration) (CloseResult, error) {
 	select {
 	case <-waitDone:
 	case <-time.After(grace):
-		if err := s.signalGroup(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		if err := s.signalGroup(pid, forceKillSignal()); err != nil && !isMissingProcessError(err) {
 			return s.failShutdown(result, fmt.Errorf("force terminate process group %d: %w", pid, err))
 		}
 		<-waitDone

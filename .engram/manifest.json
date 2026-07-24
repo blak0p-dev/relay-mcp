@@ -50,6 +50,102 @@
       "prompts": 5
     },
     {
+      "id": "09fbb58e",
+      "created_by": "admin",
+      "created_at": "2026-07-24T13:03:53Z",
+      "sessions": 1,
+      "memories": 3,
+      "prompts": 7
+    },
+    {
+      "id": "b1d8aa2a",
+      "created_by": "admin",
+      "created_at": "2026-07-24T13:18:35Z",
+      "sessions": 2,
+      "memories": 5,
+      "prompts": 2
+    },
+    {
+      "id": "85139c1a",
+      "created_by": "admin",
+      "created_at": "2026-07-24T13:27:39Z",
+      "sessions": 1,
+      "memories": 2,
+      "prompts": 1
+    },
+    {
+      "id": "ca813668",
+      "created_by": "admin",
+      "created_at": "2026-07-24T13:31:51Z",
+      "sessions": 1,
+      "memories": 2,
+      "prompts": 0
+    },
+    {
+      "id": "3a15a33a",
+      "created_by": "admin",
+      "created_at": "2026-07-24T13:52:29Z",
+      "sessions": 1,
+      "memories": 3,
+      "prompts": 0
+    },
+    {
+      "id": "fffc48b4",
+      "created_by": "admin",
+      "created_at": "2026-07-24T13:57:20Z",
+      "sessions": 0,
+      "memories": 2,
+      "prompts": 0
+    },
+    {
+      "id": "b758ed56",
+      "created_by": "admin",
+      "created_at": "2026-07-24T14:06:08Z",
+      "sessions": 1,
+      "memories": 3,
+      "prompts": 1
+    },
+    {
+      "id": "3826a08d",
+      "created_by": "admin",
+      "created_at": "2026-07-24T14:19:12Z",
+      "sessions": 1,
+      "memories": 3,
+      "prompts": 0
+    },
+    {
+      "id": "2d1b179a",
+      "created_by": "admin",
+      "created_at": "2026-07-24T14:25:17Z",
+      "sessions": 1,
+      "memories": 3,
+      "prompts": 0
+    },
+    {
+      "id": "92a93822",
+      "created_by": "admin",
+      "created_at": "2026-07-24T14:32:00Z",
+      "sessions": 0,
+      "memories": 4,
+      "prompts": 1
+    },
+    {
+      "id": "d0d4d40b",
+      "created_by": "admin",
+      "created_at": "2026-07-24T14:42:17Z",
+      "sessions": 10,
+      "memories": 18,
+      "prompts": 12
+    },
+    {
+      "id": "a5e55378",
+      "created_by": "admin",
+      "created_at": "2026-07-24T14:58:09Z",
+      "sessions": 2,
+      "memories": 7,
+      "prompts": 1
+    },
+    {
       "id": "0c9ca47f",
       "created_by": "admin",
       "created_at": "2026-07-24T14:47:17Z",

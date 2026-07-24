@@ -2,14 +2,16 @@ package description
 
 // ServerName is the MCP server implementation name advertised in the
 // initialize response. It identifies the product to MCP clients.
-const ServerName = "relay-mcp"
+const ServerName = "relay"
 
-// ServerVersion is the advertised MCP server version.
-const ServerVersion = "0.1.0"
+// ServerVersion is the advertised MCP server version. Release builds override
+// this variable with the linker while source builds retain the development
+// version.
+var ServerVersion = "dev"
 
 // ServerInstructions is the global server description sent to the client in the
-// initialize response. It explains what relay-mcp is and when to use it.
-const ServerInstructions = "relay-mcp does not replace your shell — it gives you what your shell alone cannot: interactive, persistent terminal sessions. Install packages and answer prompts without workarounds. SSH into servers and keep the session alive between turns. Run long-lived processes. You have eyes on a real PTY — use standard tools when they suffice, and reach for relay-mcp when you need interactivity."
+// initialize response. It explains what Relay is and when to use it.
+const ServerInstructions = "Relay does not replace your shell — it gives you what your shell alone cannot: interactive, persistent terminal sessions. Install packages and answer prompts without workarounds. SSH into servers and keep the session alive between turns. Run long-lived processes. You have eyes on a real PTY — use standard tools when they suffice, and reach for Relay when you need interactivity."
 
 // create_terminal constants are the single source of truth for the tool's
 // client-facing metadata.

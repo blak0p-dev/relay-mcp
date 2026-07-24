@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
@@ -14,10 +13,10 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
       - name: gofmt
         run: test -z "$(gofmt -l .)" || (echo "Files not formatted with gofmt:"; gofmt -l .; exit 1)
       - name: Vet
@@ -27,13 +26,26 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v5
         with:
-          go-version: stable
+          go-version-file: go.mod
       - name: Build
         run: go build ./...
       - name: Vet
         run: go vet ./...
       - name: Test
         run: go test -race -shuffle=on -count=1 ./...
+      - name: Test POSIX installer
+        run: bash scripts/install_test.sh
+      - name: Verify release contracts
+        run: bash scripts/release_test.sh --release-config
+
+  windows-installer:
+    name: Test Windows installer runtime
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Test Windows installer runtime
+        shell: pwsh
+        run: ./scripts/install_test.ps1
