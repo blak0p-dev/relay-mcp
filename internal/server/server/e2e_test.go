@@ -45,7 +45,12 @@ type e2eProbe struct {
 
 func newE2EProbe(t *testing.T) *e2eProbe {
 	t.Helper()
-	bin := buildBinary(t)
+	return newE2EProbeWithLDFlags(t, "")
+}
+
+func newE2EProbeWithLDFlags(t *testing.T, ldflags string) *e2eProbe {
+	t.Helper()
+	bin := buildBinaryWithLDFlags(t, ldflags)
 	cmd := exec.Command(bin)
 	cmd.Env = append(os.Environ(), "RELAY_MCP_E2E=1")
 	stdin, err := cmd.StdinPipe()
@@ -76,9 +81,19 @@ func newE2EProbe(t *testing.T) *e2eProbe {
 
 func buildBinary(t *testing.T) string {
 	t.Helper()
+	return buildBinaryWithLDFlags(t, "")
+}
+
+func buildBinaryWithLDFlags(t *testing.T, ldflags string) string {
+	t.Helper()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "relay-mcp-test")
-	build := exec.Command("go", "build", "-o", bin, "./cmd/relay-mcp")
+	args := []string{"build", "-o", bin}
+	if ldflags != "" {
+		args = append(args, "-ldflags", ldflags)
+	}
+	args = append(args, "./cmd/relay-mcp")
+	build := exec.Command("go", args...)
 	// go build resolves ./cmd/relay-mcp relative to the module root; the test
 	// binary lives in internal/server/server, so walk up three parents to find
 	// the repo root. We detect it by looking for go.mod.
@@ -89,6 +104,55 @@ func buildBinary(t *testing.T) string {
 		t.Fatalf("go build ./cmd/relay-mcp: %v", err)
 	}
 	return bin
+}
+
+func TestE2E_InitializeAdvertisesRelayIdentityAndVersion(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping process identity E2E test in -short mode")
+	}
+
+	cases := []struct {
+		name    string
+		ldflags string
+		version string
+	}{
+		{name: "development build", version: "dev"},
+		{
+			name:    "release build",
+			ldflags: "-X github.com/blak0p/relay-mcp/internal/server/description.ServerVersion=1.2.3",
+			version: "1.2.3",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			probe := newE2EProbeWithLDFlags(t, tc.ldflags)
+			response := probe.send(t, 1, "initialize", map[string]any{
+				"protocolVersion": "2025-11-25",
+				"capabilities":    map[string]any{},
+				"clientInfo":      map[string]any{"name": "e2e-test", "version": "0.0.1"},
+			})
+			if response.Error != nil {
+				t.Fatalf("initialize returned error: %+v", response.Error)
+			}
+
+			var initialized struct {
+				ServerInfo struct {
+					Name    string `json:"name"`
+					Version string `json:"version"`
+				} `json:"serverInfo"`
+			}
+			if err := json.Unmarshal(response.Result, &initialized); err != nil {
+				t.Fatalf("unmarshal initialize response: %v", err)
+			}
+			if initialized.ServerInfo.Name != "relay" {
+				t.Fatalf("serverInfo.name = %q, want relay", initialized.ServerInfo.Name)
+			}
+			if initialized.ServerInfo.Version != tc.version {
+				t.Fatalf("serverInfo.version = %q, want %q", initialized.ServerInfo.Version, tc.version)
+			}
+		})
+	}
 }
 
 // findModuleRoot walks up from the current working directory until it finds a
