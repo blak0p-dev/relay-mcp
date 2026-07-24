@@ -37,6 +37,12 @@ func TestSessionOutput_CloseUnblocksReader(t *testing.T) {
 	}
 
 	s := startOutputTestSession(t, "sleep 10")
+	t.Cleanup(func() {
+		if s.Cmd.Process != nil {
+			_ = s.Cmd.Process.Kill()
+			_ = s.Cmd.Wait()
+		}
+	})
 	s.StartOutput()
 
 	if err := s.Close(); err != nil {
