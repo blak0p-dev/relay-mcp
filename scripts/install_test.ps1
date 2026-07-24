@@ -6,6 +6,7 @@ $ErrorActionPreference = 'Stop'
 $Installer = Join-Path $PSScriptRoot 'install.ps1'
 $script:Passed = 0
 $script:Failed = 0
+$script:OriginalHomeEnvironment = [Environment]::GetEnvironmentVariable('HOME', 'Process')
 
 function Add-RedResult {
     param([string]$Scenario)
@@ -40,11 +41,11 @@ function New-Fixtures {
     $releaseRoot = Join-Path $workspace 'releases'
     $release = Join-Path $releaseRoot 'download/v1.2.3'
     $goBin = Join-Path $workspace 'go/bin'
-    $home = Join-Path $workspace 'home'
-    $piDirectory = Join-Path $home '.config/mcp'
+    $configHome = Join-Path $workspace 'home'
+    $piDirectory = Join-Path $configHome '.config/mcp'
     $fakeBin = Join-Path $workspace 'fake bin'
     $clientLog = Join-Path $workspace 'client.log'
-    New-Item -ItemType Directory -Force -Path $release, $goBin, $piDirectory, $fakeBin, $home | Out-Null
+    New-Item -ItemType Directory -Force -Path $release, $goBin, $piDirectory, $fakeBin, $configHome | Out-Null
     Set-Content -LiteralPath (Join-Path $goBin 'relay.exe') -Value 'prior relay binary' -NoNewline
     $asset = 'relay_v1.2.3_windows_amd64.zip'
     New-ZipFixture -Path (Join-Path $release $asset) -Entries 'relay.exe'
@@ -61,7 +62,7 @@ exit /b 0
     $piConfig = Join-Path $piDirectory 'mcp.json'
     Set-Content -LiteralPath $piConfig -Value '{"mcpServers":{"unrelated":{"command":"keep-me"}}}' -NoNewline
     $releaseBaseUrl = [uri]::new($releaseRoot + [System.IO.Path]::DirectorySeparatorChar).AbsoluteUri.TrimEnd('/')
-    return @{ Workspace = $workspace; Release = $release; ReleaseBaseUrl = $releaseBaseUrl; GoBin = $goBin; Home = $home; FakeBin = $fakeBin; ClientLog = $clientLog; PiConfig = $piConfig; Asset = $asset }
+    return @{ Workspace = $workspace; Release = $release; ReleaseBaseUrl = $releaseBaseUrl; GoBin = $goBin; FakeBin = $fakeBin; ClientLog = $clientLog; PiConfig = $piConfig; Asset = $asset }
 }
 
 function Write-Manifest {
@@ -85,11 +86,20 @@ function Set-Archive {
 
 function Set-FixtureEnvironment {
     param([hashtable]$Fixture)
-    $env:HOME = $Fixture.Home
     $env:GOBIN = $Fixture.GoBin
     $env:RELAY_PI_CONFIG = $Fixture.PiConfig
     $env:RELAY_CLIENT_LOG = $Fixture.ClientLog
     $env:Path = "$($Fixture.FakeBin);$script:OriginalPath"
+    Assert-FixtureEnvironment -Fixture $Fixture
+}
+
+function Assert-FixtureEnvironment {
+    param([hashtable]$Fixture)
+    if ($env:GOBIN -cne $Fixture.GoBin) { throw 'fixture did not configure GOBIN for the temporary binary directory' }
+    if ($env:RELAY_PI_CONFIG -cne $Fixture.PiConfig) { throw 'fixture did not configure RELAY_PI_CONFIG for the temporary Pi configuration' }
+    if ([Environment]::GetEnvironmentVariable('HOME', 'Process') -cne $script:OriginalHomeEnvironment) {
+        throw 'fixture must not override HOME; use GOBIN and RELAY_PI_CONFIG for hermetic paths'
+    }
 }
 
 function Invoke-Installer {
@@ -202,7 +212,7 @@ function Test-UnsafeVersionPreservation {
 
 $script:OriginalPath = $env:Path
 $originalEnvironment = @{}
-foreach ($name in @('HOME', 'GOBIN', 'RELAY_PI_CONFIG', 'RELAY_CLIENT_LOG', 'RELAY_FAIL_CLIENT')) { $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+foreach ($name in @('GOBIN', 'RELAY_PI_CONFIG', 'RELAY_CLIENT_LOG', 'RELAY_FAIL_CLIENT')) { $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
     Test-FirstInstallRepeatAndPi
     Test-ClientFailureAndMissingClient
