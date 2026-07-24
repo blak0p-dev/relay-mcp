@@ -67,15 +67,16 @@ type Session struct {
 	closed atomic.Bool // guards Close against double-close; atomic for lock-free reads from Write
 	mu     sync.Mutex  // guards State and the double-close idempotency check in Close
 
-	writeMu     sync.Mutex // serializes concurrent Write calls so byte streams do not interleave in the PTY (REQ-WT-005)
-	ptyWriter   ptyWriter  // write target; defaults to PTY. Overridden only by tests via setPtyWriterForTest.
-	outputOnce  sync.Once  // ensures no consumer competes with the PTY output reader
-	outputDone  chan struct{}
-	waitOnce    sync.Once // makes Cmd.Wait authoritative for both output and shutdown paths
-	waitDone    chan struct{}
-	waitErr     error
-	waitCalls   atomic.Int32 // invariant counter: Cmd.Wait must execute exactly once
-	signalGroup func(int, syscall.Signal) error
+	writeMu       sync.Mutex // serializes concurrent Write calls so byte streams do not interleave in the PTY (REQ-WT-005)
+	ptyWriter     ptyWriter  // write target; defaults to PTY. Overridden only by tests via setPtyWriterForTest.
+	outputOnce    sync.Once  // ensures no consumer competes with the PTY output reader
+	outputStarted atomic.Bool
+	outputDone    chan struct{}
+	waitOnce      sync.Once // makes Cmd.Wait authoritative for both output and shutdown paths
+	waitDone      chan struct{}
+	waitErr       error
+	waitCalls     atomic.Int32 // invariant counter: Cmd.Wait must execute exactly once
+	signalGroup   func(int, syscall.Signal) error
 }
 
 // New constructs a Session from a started (or about-to-start) command and its
@@ -105,6 +106,7 @@ func New(cmd *exec.Cmd, pty *os.File) *Session {
 // between competing consumers.
 func (s *Session) StartOutput() {
 	s.outputOnce.Do(func() {
+		s.outputStarted.Store(true)
 		go s.readOutput()
 	})
 }
@@ -235,10 +237,21 @@ func (s *Session) Shutdown(grace time.Duration) (CloseResult, error) {
 	if s.Cmd == nil || s.Cmd.Process == nil {
 		return s.failShutdown(result, errors.New("missing process"))
 	}
-	if s.Cmd.ProcessState != nil {
+	if !s.outputStarted.Load() && s.Cmd.ProcessState != nil {
 		result.State = classifyExit(s.Cmd)
 		result.ExitCode = s.Cmd.ProcessState.ExitCode()
 		return s.finishShutdown(result)
+	}
+	// Cmd.Wait mutates ProcessState. Only inspect it after the shared wait
+	// completes so Shutdown cannot race with the output reader.
+	select {
+	case <-s.waitDone:
+		result.State = classifyExit(s.Cmd)
+		if s.Cmd.ProcessState != nil && s.Cmd.ProcessState.Exited() {
+			result.ExitCode = s.Cmd.ProcessState.ExitCode()
+		}
+		return s.finishShutdown(result)
+	default:
 	}
 	pid := s.PID
 	if pid == 0 {

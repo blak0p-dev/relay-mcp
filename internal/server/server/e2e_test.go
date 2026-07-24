@@ -666,15 +666,31 @@ func TestE2E_ReadTerminal_StreamsProgressBeforeFinalResponse(t *testing.T) {
 		t.Fatal("read_terminal progress was not observed before releasing the terminal")
 	}
 
-	// Keep the terminal running until the stream has delivered the marker.
-	probe.sendRequest(t, 6, "tools/call", map[string]any{
+	// Release read first, keeping bash alive so its write response cannot race
+	// with stream completion. The subsequent exit ends the stream.
+	released := probe.send(t, 6, "tools/call", map[string]any{
 		"name":      "write_terminal",
-		"arguments": map[string]any{"data": "\nexit\n"},
+		"arguments": map[string]any{"data": "\n"},
+	})
+	if released.Error != nil {
+		t.Fatalf("release write_terminal returned JSON-RPC error: %+v", released.Error)
+	}
+	if released.Result == nil {
+		t.Fatal("release write_terminal returned no result")
+	}
+	releaseResult := parseWriteToolResultFromResult(t, released.Result)
+	if releaseResult.BytesWritten != len("\n") {
+		t.Fatalf("release write_terminal bytes_written = %d, want %d", releaseResult.BytesWritten, len("\n"))
+	}
+
+	probe.sendRequest(t, 7, "tools/call", map[string]any{
+		"name":      "write_terminal",
+		"arguments": map[string]any{"data": "exit\n"},
 	})
 
-	sawReleaseResponse := false
+	sawExitResponse := false
 	sawFinalResponse := false
-	for !sawReleaseResponse || !sawFinalResponse {
+	for !sawExitResponse || !sawFinalResponse {
 		line, err := probe.readLine(t)
 		if err != nil {
 			t.Fatalf("read terminal completion response: %v", err)
@@ -684,18 +700,18 @@ func TestE2E_ReadTerminal_StreamsProgressBeforeFinalResponse(t *testing.T) {
 			continue
 		}
 		switch string(message.ID) {
-		case "6":
+		case "7":
 			if message.Error != nil {
-				t.Fatalf("release write_terminal returned JSON-RPC error: %+v", message.Error)
+				t.Fatalf("exit write_terminal returned JSON-RPC error: %+v", message.Error)
 			}
 			if message.Result == nil {
-				t.Fatal("release write_terminal returned no result")
+				t.Fatal("exit write_terminal returned no result")
 			}
-			released := parseWriteToolResultFromResult(t, message.Result)
-			if released.BytesWritten != len("\nexit\n") {
-				t.Fatalf("release write_terminal bytes_written = %d, want %d", released.BytesWritten, len("\nexit\n"))
+			exited := parseWriteToolResultFromResult(t, message.Result)
+			if exited.BytesWritten != len("exit\n") {
+				t.Fatalf("exit write_terminal bytes_written = %d, want %d", exited.BytesWritten, len("exit\n"))
 			}
-			sawReleaseResponse = true
+			sawExitResponse = true
 		case "5":
 			if message.Error != nil {
 				t.Fatalf("read_terminal returned JSON-RPC error: %+v", message.Error)
