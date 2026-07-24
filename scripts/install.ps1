@@ -46,6 +46,14 @@ function Download([string]$Uri, [string]$OutputPath) {
     catch { Fail "could not download $Uri" }
 }
 
+function Get-ReleaseAssetUri([string]$BaseUrl, [string]$Version, [string]$Asset) {
+    try { $baseUri = [uri]::new($BaseUrl, [System.UriKind]::Absolute) }
+    catch { Fail "invalid release base URL: $BaseUrl" }
+    if (-not $baseUri.IsAbsoluteUri) { Fail "invalid release base URL: $BaseUrl" }
+    if (-not $baseUri.AbsoluteUri.EndsWith('/')) { $baseUri = [uri]::new($baseUri.AbsoluteUri + '/') }
+    return [uri]::new($baseUri, "download/$Version/$Asset").AbsoluteUri
+}
+
 function Assert-Checksum([string]$ManifestPath, [string]$ArchivePath) {
     $asset = [System.IO.Path]::GetFileName($ArchivePath)
     $entries = @(
@@ -84,7 +92,9 @@ function Expand-Relay([string]$ArchivePath, [string]$StagePath) {
 
 function Install-StagedBinary([string]$StagedBinary, [string]$Destination) {
     if (Test-Path -LiteralPath $Destination) {
-        [System.IO.File]::Replace($StagedBinary, $Destination, $null)
+        $backup = Join-Path (Split-Path -Parent $Destination) ('.relay-backup-' + [guid]::NewGuid())
+        try { [System.IO.File]::Replace($StagedBinary, $Destination, $backup) }
+        finally { if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force } }
     } else {
         [System.IO.File]::Move($StagedBinary, $Destination)
     }
@@ -115,12 +125,16 @@ function Merge-PiConfiguration([string]$ConfigPath, [string]$Binary) {
     $directory = Split-Path -Parent $ConfigPath
     New-Item -ItemType Directory -Force -Path $directory | Out-Null
     $temporary = Join-Path $directory ('.' + [System.IO.Path]::GetFileName($ConfigPath) + '.' + [guid]::NewGuid())
+    $backup = Join-Path $directory ('.' + [System.IO.Path]::GetFileName($ConfigPath) + '.backup-' + [guid]::NewGuid())
     try {
         [System.IO.File]::WriteAllText($temporary, (($document | ConvertTo-Json -Depth 16) + [Environment]::NewLine), [System.Text.UTF8Encoding]::new($false))
-        if (Test-Path -LiteralPath $ConfigPath) { [System.IO.File]::Replace($temporary, $ConfigPath, $null) }
+        if (Test-Path -LiteralPath $ConfigPath) { [System.IO.File]::Replace($temporary, $ConfigPath, $backup) }
         else { [System.IO.File]::Move($temporary, $ConfigPath) }
     }
-    finally { if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force } }
+    finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+        if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }
+    }
 }
 
 function Configure-Pi([string]$Binary) {
@@ -147,8 +161,8 @@ try {
     New-Item -ItemType Directory -Path $workspace | Out-Null
     $archive = Join-Path $workspace $asset
     $manifest = Join-Path $workspace 'checksums.txt'
-    Download "$ReleaseBaseUrl/download/$Version/$asset" $archive
-    Download "$ReleaseBaseUrl/download/$Version/checksums.txt" $manifest
+    Download (Get-ReleaseAssetUri -BaseUrl $ReleaseBaseUrl -Version $Version -Asset $asset) $archive
+    Download (Get-ReleaseAssetUri -BaseUrl $ReleaseBaseUrl -Version $Version -Asset 'checksums.txt') $manifest
     Assert-Checksum $manifest $archive
 
     $destinationDirectory = if ($env:GOBIN) { $env:GOBIN } else { Join-Path $HOME 'go/bin' }
