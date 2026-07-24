@@ -168,7 +168,8 @@ resolve_version
 validate_version
 platform
 
-asset="relay_${version}_${os}_${arch}.tar.gz"
+asset_version="${version#v}"
+asset="relay_${asset_version}_${os}_${arch}.tar.gz"
 release_base_url="${RELAY_RELEASE_BASE_URL:-$DEFAULT_RELEASE_BASE_URL}"
 workspace="$(mktemp -d "${TMPDIR:-/tmp}/relay-install.XXXXXX")" || die 'could not create a temporary workspace'
 archive="$workspace/$asset"

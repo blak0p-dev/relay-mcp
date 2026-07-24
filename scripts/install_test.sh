@@ -84,7 +84,7 @@ setup() {
   registry="$workspace/registry"
   client_log="$workspace/client.log"
   pi_config="$workspace/pi/mcp.json"
-  asset='relay_v1.2.3_linux_amd64.tar.gz'
+  asset='relay_1.2.3_linux_amd64.tar.gz'
   system_path="$PATH"
   mkdir -p "$release" "$home" "$gobin" "$fake_bin" "$registry" "$(dirname "$pi_config")"
   printf 'prior relay binary\n' >"$gobin/relay"
