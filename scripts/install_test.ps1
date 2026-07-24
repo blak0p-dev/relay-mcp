@@ -1,11 +1,15 @@
 [CmdletBinding()]
-param([switch]$Red)
+param(
+    [switch]$Red,
+    [switch]$FileUriContract
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $Installer = Join-Path $PSScriptRoot 'install.ps1'
 $script:Passed = 0
 $script:Failed = 0
+$script:OriginalHomeEnvironment = [Environment]::GetEnvironmentVariable('HOME', 'Process')
 
 function Add-RedResult {
     param([string]$Scenario)
@@ -40,11 +44,11 @@ function New-Fixtures {
     $releaseRoot = Join-Path $workspace 'releases'
     $release = Join-Path $releaseRoot 'download/v1.2.3'
     $goBin = Join-Path $workspace 'go/bin'
-    $home = Join-Path $workspace 'home'
-    $piDirectory = Join-Path $home '.config/mcp'
+    $configHome = Join-Path $workspace 'home'
+    $piDirectory = Join-Path $configHome '.config/mcp'
     $fakeBin = Join-Path $workspace 'fake bin'
     $clientLog = Join-Path $workspace 'client.log'
-    New-Item -ItemType Directory -Force -Path $release, $goBin, $piDirectory, $fakeBin, $home | Out-Null
+    New-Item -ItemType Directory -Force -Path $release, $goBin, $piDirectory, $fakeBin, $configHome | Out-Null
     Set-Content -LiteralPath (Join-Path $goBin 'relay.exe') -Value 'prior relay binary' -NoNewline
     $asset = 'relay_v1.2.3_windows_amd64.zip'
     New-ZipFixture -Path (Join-Path $release $asset) -Entries 'relay.exe'
@@ -61,7 +65,7 @@ exit /b 0
     $piConfig = Join-Path $piDirectory 'mcp.json'
     Set-Content -LiteralPath $piConfig -Value '{"mcpServers":{"unrelated":{"command":"keep-me"}}}' -NoNewline
     $releaseBaseUrl = [uri]::new($releaseRoot + [System.IO.Path]::DirectorySeparatorChar).AbsoluteUri.TrimEnd('/')
-    return @{ Workspace = $workspace; Release = $release; ReleaseBaseUrl = $releaseBaseUrl; GoBin = $goBin; Home = $home; FakeBin = $fakeBin; ClientLog = $clientLog; PiConfig = $piConfig; Asset = $asset }
+    return @{ Workspace = $workspace; Release = $release; ReleaseBaseUrl = $releaseBaseUrl; GoBin = $goBin; FakeBin = $fakeBin; ClientLog = $clientLog; PiConfig = $piConfig; Asset = $asset }
 }
 
 function Write-Manifest {
@@ -85,11 +89,20 @@ function Set-Archive {
 
 function Set-FixtureEnvironment {
     param([hashtable]$Fixture)
-    $env:HOME = $Fixture.Home
     $env:GOBIN = $Fixture.GoBin
     $env:RELAY_PI_CONFIG = $Fixture.PiConfig
     $env:RELAY_CLIENT_LOG = $Fixture.ClientLog
     $env:Path = "$($Fixture.FakeBin);$script:OriginalPath"
+    Assert-FixtureEnvironment -Fixture $Fixture
+}
+
+function Assert-FixtureEnvironment {
+    param([hashtable]$Fixture)
+    if ($env:GOBIN -cne $Fixture.GoBin) { throw 'fixture did not configure GOBIN for the temporary binary directory' }
+    if ($env:RELAY_PI_CONFIG -cne $Fixture.PiConfig) { throw 'fixture did not configure RELAY_PI_CONFIG for the temporary Pi configuration' }
+    if ([Environment]::GetEnvironmentVariable('HOME', 'Process') -cne $script:OriginalHomeEnvironment) {
+        throw 'fixture must not override HOME; use GOBIN and RELAY_PI_CONFIG for hermetic paths'
+    }
 }
 
 function Invoke-Installer {
@@ -116,11 +129,55 @@ function Remove-Fixture {
     Remove-Item -LiteralPath $Fixture.Workspace -Recurse -Force
 }
 
+function Invoke-InstallerFunction {
+    param([string]$Name, [object[]]$Arguments)
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Installer, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count -ne 0) { throw "could not parse installer function $Name" }
+    $definition = $ast.Find({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $Name }, $true)
+    if ($null -eq $definition) { throw "installer function $Name is missing" }
+    $script = [scriptblock]::Create("$($definition.Extent.Text)`n& $Name @args")
+    return & $script @Arguments
+}
+
+function Test-FileReleaseUriContract {
+    $fixture = New-Fixtures
+    $replacementWorkspace = Join-Path $fixture.Workspace 'replacement'
+    try {
+        $fileUri = Invoke-InstallerFunction -Name 'Get-ReleaseAssetUri' -Arguments @($fixture.ReleaseBaseUrl, 'v1.2.3', $fixture.Asset)
+        if (([uri]$fileUri).LocalPath -cne (Join-Path $fixture.Release $fixture.Asset)) { throw 'file release URI did not resolve to the fixture archive path' }
+        $httpsUri = Invoke-InstallerFunction -Name 'Get-ReleaseAssetUri' -Arguments @('https://github.com/blak0p-dev/relay-mcp/releases', 'v1.2.3', $fixture.Asset)
+        if ($httpsUri -cne "https://github.com/blak0p-dev/relay-mcp/releases/download/v1.2.3/$($fixture.Asset)") { throw 'HTTPS release URI did not retain the releases path' }
+
+        New-Item -ItemType Directory -Path $replacementWorkspace | Out-Null
+        $staged = Join-Path $replacementWorkspace 'staged.exe'
+        $destination = Join-Path $replacementWorkspace 'relay.exe'
+        Set-Content -LiteralPath $staged -Value 'new relay binary' -NoNewline
+        Set-Content -LiteralPath $destination -Value 'prior relay binary' -NoNewline
+        Invoke-InstallerFunction -Name 'Install-StagedBinary' -Arguments @($staged, $destination)
+        if ([System.IO.File]::ReadAllText($destination) -ne 'new relay binary') { throw 'staged binary did not replace the existing destination' }
+        $piConfig = Join-Path $replacementWorkspace 'mcp.json'
+        Set-Content -LiteralPath $piConfig -Value '{"mcpServers":{"unrelated":{"command":"keep-me"}}}' -NoNewline
+        Invoke-InstallerFunction -Name 'Merge-PiConfiguration' -Arguments @($piConfig, $destination)
+        $configuration = Get-Content -LiteralPath $piConfig -Raw | ConvertFrom-Json -AsHashtable
+        if ($configuration['mcpServers']['unrelated']['command'] -ne 'keep-me') { throw 'Pi replacement removed an unrelated entry' }
+        if ($configuration['mcpServers']['relay']['command'] -ne $destination) { throw 'Pi replacement did not add relay.exe' }
+        Write-Output 'PASS file release URI and staged replacement preserve fixture and HTTPS paths'
+    }
+    finally { Remove-Fixture $fixture }
+}
+
 if ($Red) {
     throw 'The RED-only Phase 1 mode has been replaced by the Phase 2 functional harness. Run without -Red.'
 }
 
 if (-not (Test-Path -LiteralPath $Installer)) { throw 'install.ps1 is missing: expected RED state before Task 2.2' }
+
+if ($FileUriContract) {
+    Test-FileReleaseUriContract
+    exit 0
+}
 
 if (-not [System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows)) {
     throw 'Windows installer runtime harness requires a native Windows host'
@@ -202,7 +259,7 @@ function Test-UnsafeVersionPreservation {
 
 $script:OriginalPath = $env:Path
 $originalEnvironment = @{}
-foreach ($name in @('HOME', 'GOBIN', 'RELAY_PI_CONFIG', 'RELAY_CLIENT_LOG', 'RELAY_FAIL_CLIENT')) { $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
+foreach ($name in @('GOBIN', 'RELAY_PI_CONFIG', 'RELAY_CLIENT_LOG', 'RELAY_FAIL_CLIENT')) { $originalEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
     Test-FirstInstallRepeatAndPi
     Test-ClientFailureAndMissingClient
