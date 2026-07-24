@@ -20,23 +20,77 @@ Relay lets AI agents spawn real PTY sessions — bash, python, lazygit, whatever
 
 5 tools, well made. Covers 90% of real agent-terminal interaction.
 
-## Quick start
+## Install a release
+
+Install a verified, no-sudo release for your platform. The installers support Linux and macOS on amd64 or arm64, and Windows on amd64 or arm64. They place `relay` in `$GOBIN` when set, otherwise in `$HOME/go/bin` (`$HOME\go\bin` on Windows).
+
+### Linux and macOS
 
 ```sh
-go install github.com/blak0p/relay-mcp/cmd/relay-mcp@latest
-relay-mcp
+curl --fail --show-error --location --proto '=https' \
+  https://raw.githubusercontent.com/blak0p-dev/relay-mcp/main/scripts/install.sh | bash
 ```
 
-The MCP client drives the server over stdin/stdout — no flags, no config.
-
-Or build from source:
+To install a specific release, pass its tag:
 
 ```sh
-git clone https://github.com/blak0p/relay-mcp.git
+curl --fail --show-error --location --proto '=https' \
+  https://raw.githubusercontent.com/blak0p-dev/relay-mcp/main/scripts/install.sh | bash -s -- --version v1.2.3
+```
+
+### Windows
+
+In PowerShell:
+
+```powershell
+Invoke-WebRequest https://raw.githubusercontent.com/blak0p-dev/relay-mcp/main/scripts/install.ps1 -OutFile .\install-relay.ps1
+.\install-relay.ps1
+Remove-Item .\install-relay.ps1
+```
+
+For a specific release, run `.\install-relay.ps1 -Version v1.2.3` instead. Both installers download the matching archive and `checksums.txt`, verify SHA-256 before replacement, and keep an existing binary unchanged if verification fails. They never invoke `sudo`.
+
+### PATH
+
+The installer reports when its destination is not on `PATH`; add that destination and open a new shell before running `relay`. It does not edit shell profiles or system PATH settings automatically.
+
+The MCP client drives Relay over stdin/stdout — no flags or server-side configuration are required.
+
+## Client setup and remediation
+
+The installer detects available clients and configures one global/user registration named `relay`. Re-running it replaces that registration rather than adding duplicates. Missing clients are skipped and their exact command is printed.
+
+| Client | Automatic setup | Manual remediation |
+|---|---|---|
+| Claude Code | User scope | `claude mcp add --scope user relay -- /absolute/path/to/relay` |
+| Codex | User configuration | `codex mcp add relay -- /absolute/path/to/relay` |
+| OpenCode | User configuration | `opencode mcp add relay -- /absolute/path/to/relay` |
+| Pi | Installs `npm:pi-mcp-adapter` and upserts Relay | `pi install npm:pi-mcp-adapter`, then add Relay through Pi's supported MCP flow |
+
+For Pi, the installer updates only `mcpServers.relay` in `~/.config/mcp/mcp.json`; existing shared MCP entries are preserved. If you already manage that file, keep its other entries and add or update the Relay command to the installed binary. Restart or reload a client after changing its MCP configuration.
+
+## Build from source
+
+```sh
+git clone https://github.com/blak0p-dev/relay-mcp.git
 cd relay-mcp
-go build ./cmd/relay-mcp
-./relay-mcp
+go build -o relay ./cmd/relay-mcp
+./relay
 ```
+
+The repository, Go module/import path, and `cmd/relay-mcp` source directory intentionally retain their existing names. Release binaries and MCP initialization identify the server as `relay`.
+
+## Roll back or migrate
+
+To remove a release, delete the installed `relay` binary and unregister it from any client you configured:
+
+```sh
+claude mcp remove --scope user relay
+codex mcp remove relay
+opencode mcp remove relay
+```
+
+On Windows, remove `$env:GOBIN\relay.exe` when `GOBIN` is set, otherwise remove `$HOME\go\bin\relay.exe`. For Pi, remove only `mcpServers.relay` from `~/.config/mcp/mcp.json`; do not delete unrelated shared entries. Reinstall a known-good version with the versioned installer command above if you need to roll back to a prior release.
 
 ## Architecture
 
