@@ -144,6 +144,14 @@
       "sessions": 2,
       "memories": 7,
       "prompts": 1
+    },
+    {
+      "id": "0c9ca47f",
+      "created_by": "admin",
+      "created_at": "2026-07-24T14:47:17Z",
+      "sessions": 11,
+      "memories": 20,
+      "prompts": 13
     }
   ]
 }

@@ -71,6 +71,7 @@ type Session struct {
 	ptyWriter     ptyWriter  // write target; defaults to PTY. Overridden only by tests via setPtyWriterForTest.
 	outputOnce    sync.Once  // ensures no consumer competes with the PTY output reader
 	outputStarted atomic.Bool
+	outputCancel  chan struct{}
 	outputDone    chan struct{}
 	waitOnce      sync.Once // makes Cmd.Wait authoritative for both output and shutdown paths
 	waitDone      chan struct{}
@@ -86,16 +87,17 @@ type Session struct {
 // handler).
 func New(cmd *exec.Cmd, pty *os.File) *Session {
 	return &Session{
-		ID:          idgen.New(),
-		PTY:         pty,
-		Cmd:         cmd,
-		StartedAt:   time.Now(),
-		State:       StateRunning,
-		Output:      output.New(output.DefaultCapacity),
-		ptyWriter:   pty, // default write target is the real PTY; tests override via setPtyWriterForTest
-		outputDone:  make(chan struct{}),
-		waitDone:    make(chan struct{}),
-		signalGroup: signalProcessGroup,
+		ID:           idgen.New(),
+		PTY:          pty,
+		Cmd:          cmd,
+		StartedAt:    time.Now(),
+		State:        StateRunning,
+		Output:       output.New(output.DefaultCapacity),
+		ptyWriter:    pty, // default write target is the real PTY; tests override via setPtyWriterForTest
+		outputCancel: make(chan struct{}),
+		outputDone:   make(chan struct{}),
+		waitDone:     make(chan struct{}),
+		signalGroup:  signalProcessGroup,
 	}
 }
 
@@ -118,7 +120,29 @@ func (s *Session) readOutput() {
 
 	buffer := make([]byte, output.DefaultReadBytes)
 	for {
-		n, err := s.PTY.Read(buffer)
+		result := make(chan struct {
+			n   int
+			err error
+		}, 1)
+		go func() {
+			n, err := s.PTY.Read(buffer)
+			result <- struct {
+				n   int
+				err error
+			}{n, err}
+		}()
+
+		var n int
+		var err error
+		select {
+		case <-s.outputCancel:
+			// Closing a PTY master does not reliably interrupt a concurrent Read
+			// while its slave remains open. The in-flight read owns no session
+			// state and will finish when the PTY eventually becomes readable.
+			return
+		case read := <-result:
+			n, err = read.n, read.err
+		}
 		if n > 0 {
 			s.Output.Append(buffer[:n])
 		}
@@ -216,6 +240,7 @@ func (s *Session) Close() error {
 		return nil
 	}
 	s.closed.Store(true)
+	close(s.outputCancel)
 	if s.Output != nil {
 		s.Output.SetStatus(output.StatusClosed)
 	}
