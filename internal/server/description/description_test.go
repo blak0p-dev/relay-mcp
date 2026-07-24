@@ -5,6 +5,17 @@ import (
 	"testing"
 )
 
+func TestServerIdentity_DefaultsToRelayDevelopmentVersion(t *testing.T) {
+	t.Parallel()
+
+	if ServerName != "relay" {
+		t.Fatalf("ServerName = %q, want %q", ServerName, "relay")
+	}
+	if ServerVersion != "dev" {
+		t.Fatalf("ServerVersion = %q, want %q", ServerVersion, "dev")
+	}
+}
+
 func TestCreateTerminalConstants_NonEmpty(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
