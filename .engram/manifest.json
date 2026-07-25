@@ -184,6 +184,14 @@
       "sessions": 0,
       "memories": 1,
       "prompts": 0
+    },
+    {
+      "id": "ede56a5d",
+      "created_by": "alejndro",
+      "created_at": "2026-07-25T10:07:33Z",
+      "sessions": 1,
+      "memories": 1,
+      "prompts": 1
     }
   ]
 }
