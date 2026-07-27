@@ -80,25 +80,51 @@ func TestNewServer_RegistersWriteTerminalTool(t *testing.T) {
 		t.Fatal("write_terminal handler is nil")
 	}
 
-	// The input schema must declare exactly one required string property "data".
+	// The input schema must declare exactly two required properties: "data" (string)
+	// and "ensure_newline" (boolean), with no default. This is the breaking
+	// contract change — callers MUST now provide ensure_newline on every call.
 	props := wt.Tool.InputSchema.Properties
-	if len(props) != 1 {
-		t.Fatalf("write_terminal input schema has %d properties, want 1 (data)", len(props))
+	if len(props) != 2 {
+		t.Fatalf("write_terminal input schema has %d properties, want 2 (data + ensure_newline)", len(props))
 	}
-	rawProp, ok := props["data"]
+
+	// Verify "data": string, required
+	rawData, ok := props["data"]
 	if !ok {
 		t.Fatalf("write_terminal input schema has no 'data' property; got %v", props)
 	}
-	propMap, ok := rawProp.(map[string]any)
+	dataPropMap, ok := rawData.(map[string]any)
 	if !ok {
-		t.Fatalf("write_terminal 'data' property is %T, want map[string]any", rawProp)
+		t.Fatalf("write_terminal 'data' property is %T, want map[string]any", rawData)
 	}
-	propType, _ := propMap["type"].(string)
-	if propType != "string" {
-		t.Fatalf("write_terminal 'data' property type = %q, want \"string\"", propType)
+	dataPropType, _ := dataPropMap["type"].(string)
+	if dataPropType != "string" {
+		t.Fatalf("write_terminal 'data' property type = %q, want \"string\"", dataPropType)
 	}
 	if !containsString(wt.Tool.InputSchema.Required, "data") {
 		t.Fatalf("write_terminal 'data' is not required; required = %v", wt.Tool.InputSchema.Required)
+	}
+
+	// Verify "ensure_newline": boolean, required, no default
+	rawEnsure, ok := props["ensure_newline"]
+	if !ok {
+		t.Fatalf("write_terminal input schema has no 'ensure_newline' property; got %v", props)
+	}
+	ensurePropMap, ok := rawEnsure.(map[string]any)
+	if !ok {
+		t.Fatalf("write_terminal 'ensure_newline' property is %T, want map[string]any", rawEnsure)
+	}
+	ensurePropType, _ := ensurePropMap["type"].(string)
+	if ensurePropType != "boolean" {
+		t.Fatalf("write_terminal 'ensure_newline' property type = %q, want \"boolean\"", ensurePropType)
+	}
+	// "ensure_newline" must be required
+	if !containsString(wt.Tool.InputSchema.Required, "ensure_newline") {
+		t.Fatalf("write_terminal 'ensure_newline' is not required; required = %v", wt.Tool.InputSchema.Required)
+	}
+	// "ensure_newline" must NOT have a default — this is the breaking change.
+	if _, hasDefault := ensurePropMap["default"]; hasDefault {
+		t.Fatalf("write_terminal 'ensure_newline' must not have a default; got %v", ensurePropMap["default"])
 	}
 }
 

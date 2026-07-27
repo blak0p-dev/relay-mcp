@@ -17,7 +17,7 @@ coupling to each other.
 | `CreateTerminalDescription`    | full description    | `server` (tool registration) |
 | `WriteTerminalName`            | `"write_terminal"`  | `server` (tool registration) |
 | `WriteTerminalSummary`         | one-line summary    | `server` (tool registration) |
-| `WriteTerminalDescription`     | full description (states 1 MiB cap + raw-byte/no-auto-Enter contract) | `server` (tool registration) |
+| `WriteTerminalDescription`     | full description (required newline policy and 1 MiB transmitted-payload cap) | `server` (tool registration) |
 | `SendControlName`              | `"send_control"`     | `server` (tool registration) |
 | `SendControlSummary`           | one-line summary      | `server` (tool registration) |
 | `SendControlDescription`       | full description (states finite allowlist, active-session-only delivery, and no-retry short writes) | `server` (tool registration) |
