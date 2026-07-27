@@ -686,7 +686,8 @@ func TestE2E_ReadTerminal_StreamsProgressBeforeFinalResponse(t *testing.T) {
 	}
 
 	marker := "READ_TERMINAL_E2E"
-	callWriteTerminal(t, probe, 4, "printf '"+marker+"\\n'; read -r _\n")
+	releasedMarker := "READ_TERMINAL_RELEASED"
+	callWriteTerminal(t, probe, 4, "printf '"+marker+"\\n'; read -r _; printf '"+releasedMarker+"\\n'\n")
 	probe.sendRequest(t, 5, "tools/call", map[string]any{
 		"name":      "read_terminal",
 		"arguments": map[string]any{},
@@ -745,6 +746,29 @@ func TestE2E_ReadTerminal_StreamsProgressBeforeFinalResponse(t *testing.T) {
 	releaseResult := parseWriteToolResultFromResult(t, released.Result)
 	if releaseResult.BytesWritten != len("\n") {
 		t.Fatalf("release write_terminal bytes_written = %d, want %d", releaseResult.BytesWritten, len("\n"))
+	}
+
+	// Wait until bash has consumed the read input and emitted the follow-up
+	// marker before sending exit. Otherwise the PTY's buffered input may let
+	// read -r consume the exit line as well.
+	sawReleasedMarker := false
+	for !sawReleasedMarker {
+		line, err := probe.readLine(t)
+		if err != nil {
+			t.Fatalf("read release progress: %v", err)
+		}
+		message := unmarshalJSONRPCMessage(t, line)
+		if message.Method == "notifications/progress" {
+			var progress struct {
+				Output string `json:"output"`
+			}
+			if err := json.Unmarshal(message.Params, &progress); err != nil {
+				t.Fatalf("unmarshal release progress params: %v", err)
+			}
+			sawReleasedMarker = strings.Contains(progress.Output, releasedMarker)
+			continue
+		}
+		t.Fatalf("unexpected message before release progress: %+v", message)
 	}
 
 	probe.sendRequest(t, 7, "tools/call", map[string]any{
