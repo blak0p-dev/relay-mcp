@@ -42,8 +42,9 @@ func NewServer(reg *registry.Registry) (*mcpserver.MCPServer, error) {
 		mcp.WithDescription(description.WriteTerminalDescription),
 		mcp.WithString("data",
 			mcp.Required(),
-			mcp.Description("Raw bytes to inject into the terminal session (max 1 MiB). No auto-Enter — include \\n if you want to submit."),
+			mcp.Description("Bytes to inject into the terminal session (max 1 MiB)."),
 		),
+		mcp.WithBoolean("ensure_newline", mcp.Required(), mcp.Description("Append one trailing LF when data does not already end in LF.")),
 	)
 	s.AddTool(writeTool, handler.NewWriteTerminalHandler(reg))
 

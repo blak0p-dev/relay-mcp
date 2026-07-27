@@ -29,12 +29,13 @@ s.AddTool(tool, h)
 
 `NewWriteTerminalHandler(reg)` returns the `write_terminal` handler. It:
 
-1. Extracts the `data` string argument. Missing or wrong-typed → `-32602`.
-2. Looks up the active session via `reg.Get()`. No session → `-32004`.
-3. Delegates to `session.Write([]byte(data))` and maps typed errors:
+1. Validates required `data` and strictly boolean `ensure_newline`; invalid input → `-32602`.
+2. Adds one LF only when `ensure_newline` is true and `data` lacks a trailing LF.
+3. Looks up the active session via `reg.Get()`. No session → `-32004`.
+4. Delegates the constructed payload to `session.Write` and maps typed errors:
    `ErrSessionNotAlive` → `-32005`, `ErrWriteTooLarge` → `-32006`,
    `ErrSessionClosed` → `-32007`, other → `-32003` (generic fallback).
-4. On success returns `{bytes_written, state}`.
+5. On success returns `{bytes_written, state}` for the actual transmitted bytes.
 
 ```go
 h := handler.NewWriteTerminalHandler(reg)

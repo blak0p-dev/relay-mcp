@@ -462,7 +462,7 @@ func callWriteTerminal(t *testing.T, probe *e2eProbe, id int, data string) write
 	t.Helper()
 	resp := probe.send(t, id, "tools/call", map[string]any{
 		"name":      "write_terminal",
-		"arguments": map[string]any{"data": data},
+		"arguments": map[string]any{"data": data, "ensure_newline": false},
 	})
 	if resp.Error != nil {
 		t.Fatalf("write_terminal (id=%d) returned JSON-RPC error: %+v", id, resp.Error)
@@ -551,6 +551,107 @@ func TestE2E_WriteTerminal_RoundTrip(t *testing.T) {
 	if again.BytesWritten != len("ls\n") {
 		t.Fatalf("second write_terminal bytes_written = %d, want %d", again.BytesWritten, len("ls\n"))
 	}
+}
+
+func TestE2E_WriteTerminal_RequiresExplicitNewlinePolicy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping write_terminal E2E test in -short mode")
+	}
+	if _, err := exec.LookPath("bash"); err != nil {
+		t.Skip("bash not in PATH; skipping E2E test")
+	}
+	probe := newE2EProbe(t)
+	initializeE2EProbe(t, probe)
+	callCreateTerminal(t, probe, 2)
+
+	invalidMarker := "WRITE_TERMINAL_INVALID_MARKER"
+	for _, tc := range []struct {
+		name      string
+		arguments map[string]any
+	}{
+		{name: "missing policy", arguments: map[string]any{"data": "printf '" + invalidMarker + "\\n'"}},
+		{name: "non boolean policy", arguments: map[string]any{"data": "printf '" + invalidMarker + "\\n'", "ensure_newline": "true"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			response := probe.send(t, 3, "tools/call", map[string]any{"name": "write_terminal", "arguments": tc.arguments})
+			if response.Error != nil || response.Result == nil {
+				t.Fatalf("write_terminal response = %+v, want tool error result", response)
+			}
+			if got := parseToolErrorFromResult(t, response.Result).Code; got != -32602 {
+				t.Fatalf("write_terminal error code = %d, want -32602", got)
+			}
+		})
+	}
+
+	truePayload := "printf 'WRITE_TERMINAL_TRUE_MARKER\\n'"
+	if got := callWriteTerminalWithPolicy(t, probe, 4, truePayload, true); got.BytesWritten != len(truePayload)+1 {
+		t.Fatalf("true bytes_written = %d, want %d", got.BytesWritten, len(truePayload)+1)
+	}
+	falsePayload := "printf 'WRITE_TERMINAL_FALSE_MARKER\\n'\n"
+	if got := callWriteTerminalWithPolicy(t, probe, 5, falsePayload, false); got.BytesWritten != len(falsePayload) {
+		t.Fatalf("false bytes_written = %d, want %d", got.BytesWritten, len(falsePayload))
+	}
+
+	output := readTerminalSnapshot(t, probe, 6)
+	if strings.Contains(output, invalidMarker) {
+		t.Fatalf("terminal output contains marker from rejected request: %q", output)
+	}
+	for _, marker := range []string{"WRITE_TERMINAL_TRUE_MARKER", "WRITE_TERMINAL_FALSE_MARKER"} {
+		if !strings.Contains(output, marker) {
+			t.Fatalf("terminal output = %q, want marker %q", output, marker)
+		}
+	}
+}
+
+func initializeE2EProbe(t *testing.T, probe *e2eProbe) {
+	t.Helper()
+	response := probe.send(t, 1, "initialize", map[string]any{
+		"protocolVersion": "2025-11-25",
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "e2e-test", "version": "0.0.1"},
+	})
+	if response.Error != nil {
+		t.Fatalf("initialize returned error: %+v", response.Error)
+	}
+}
+
+func callWriteTerminalWithPolicy(t *testing.T, probe *e2eProbe, id int, data string, ensureNewline bool) writeTerminalResult {
+	t.Helper()
+	response := probe.send(t, id, "tools/call", map[string]any{
+		"name":      "write_terminal",
+		"arguments": map[string]any{"data": data, "ensure_newline": ensureNewline},
+	})
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("write_terminal response = %+v, want successful tool result", response)
+	}
+	return parseWriteToolResultFromResult(t, response.Result)
+}
+
+func readTerminalSnapshot(t *testing.T, probe *e2eProbe, id int) string {
+	t.Helper()
+	response := probe.send(t, id, "tools/call", map[string]any{
+		"name":      "read_terminal",
+		"arguments": map[string]any{"mode": "snapshot", "wait_ms": 1000},
+	})
+	if response.Error != nil || response.Result == nil {
+		t.Fatalf("read_terminal response = %+v, want successful tool result", response)
+	}
+	var wrapper struct {
+		Content []struct {
+			Text string `json:"text"`
+		} `json:"content"`
+		IsError bool `json:"isError"`
+	}
+	if err := json.Unmarshal(response.Result, &wrapper); err != nil || wrapper.IsError || len(wrapper.Content) != 1 {
+		t.Fatalf("read_terminal result = %s, err = %v", response.Result, err)
+	}
+	var result struct {
+		Output string `json:"output"`
+	}
+	if err := json.Unmarshal([]byte(wrapper.Content[0].Text), &result); err != nil {
+		t.Fatalf("unmarshal read_terminal payload: %v", err)
+	}
+	return result.Output
 }
 
 type sendControlResult struct {
@@ -735,7 +836,7 @@ func TestE2E_ReadTerminal_StreamsProgressBeforeFinalResponse(t *testing.T) {
 	// with stream completion. The subsequent exit ends the stream.
 	released := probe.send(t, 6, "tools/call", map[string]any{
 		"name":      "write_terminal",
-		"arguments": map[string]any{"data": "\n"},
+		"arguments": map[string]any{"data": "\n", "ensure_newline": false},
 	})
 	if released.Error != nil {
 		t.Fatalf("release write_terminal returned JSON-RPC error: %+v", released.Error)
@@ -773,7 +874,7 @@ func TestE2E_ReadTerminal_StreamsProgressBeforeFinalResponse(t *testing.T) {
 
 	probe.sendRequest(t, 7, "tools/call", map[string]any{
 		"name":      "write_terminal",
-		"arguments": map[string]any{"data": "exit\n"},
+		"arguments": map[string]any{"data": "exit\n", "ensure_newline": false},
 	})
 
 	sawExitResponse := false

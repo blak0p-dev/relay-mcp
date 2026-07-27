@@ -239,6 +239,14 @@ func handleWriteTerminal(ctx context.Context, reg *registry.Registry, req mcp.Ca
 			nil,
 		), nil
 	}
+	ensureNewline, ok := req.GetArguments()["ensure_newline"].(bool)
+	if !ok {
+		return errorResult(codeInvalidArgument, "missing or invalid 'ensure_newline' argument", nil), nil
+	}
+	payload := []byte(data)
+	if ensureNewline && (len(payload) == 0 || payload[len(payload)-1] != '\n') {
+		payload = append(payload, '\n')
+	}
 
 	// 2. Look up the active session. ErrSessionNotFound → codeSessionNotFound.
 	s, err := reg.Get()
@@ -254,7 +262,7 @@ func handleWriteTerminal(ctx context.Context, reg *registry.Registry, req mcp.Ca
 	}
 
 	// 3. Delegate to Session.Write and map the typed error to a stable code.
-	n, werr := s.Write([]byte(data))
+	n, werr := s.Write(payload)
 	if werr != nil {
 		return mapWriteError(werr, s.ID), nil
 	}
