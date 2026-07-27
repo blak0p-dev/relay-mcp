@@ -287,7 +287,7 @@ func newWriteRequest(data string) mcp.CallToolRequest {
 	return mcp.CallToolRequest{
 		Params: mcp.CallToolParams{
 			Name:      "write_terminal",
-			Arguments: map[string]any{"data": data},
+			Arguments: map[string]any{"data": data, "ensure_newline": false},
 		},
 	}
 }

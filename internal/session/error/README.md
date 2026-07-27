@@ -31,7 +31,7 @@ folder.
 | `ErrSessionNotAlive` | `write_terminal` targets a session whose bash process is dead (or a session id absent from the Registry). Message includes the session id. | -32005 |
 | `ErrWriteTooLarge` | `write_terminal` payload exceeds `MaxWriteBytes` (1 MiB). Message includes the limit and the actual size. | -32006 |
 | `ErrSessionClosed` | `write_terminal` races with `close_terminal` and observes the `closed` flag set. | -32007 |
-| `ErrInvalidArgument` | `write_terminal` is called with a missing or wrong-typed `data` argument. | -32602 (JSON-RPC invalid params) |
+| `ErrInvalidArgument` | `write_terminal` is called with missing or wrongly typed `data` or `ensure_newline`. | -32602 (JSON-RPC invalid params) |
 
 ### Code assignment rationale
 

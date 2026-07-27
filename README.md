@@ -13,7 +13,7 @@ Relay lets AI agents spawn real PTY sessions — bash, python, lazygit, whatever
 | Tool | What it does |
 |---|---|
 | `create_terminal` | Spawn a new PTY session (bash by default) |
-| `write_terminal` | Write input to the session (no auto-Enter — include `\n`) |
+| `write_terminal` | Write input with required `ensure_newline`; true appends one LF, false preserves bytes |
 | `read_terminal` | Read output incrementally (stream, snapshot, or drain) |
 | `send_control` | Send control sequences: Ctrl+C, arrows, Tab, etc. |
 | `close_terminal` | Kill the session and free its resources |

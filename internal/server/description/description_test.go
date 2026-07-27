@@ -81,15 +81,18 @@ func TestWriteTerminalConstants_DistinctFromCreate(t *testing.T) {
 }
 
 // TestWriteTerminalDescription_StatesContract asserts the description tells
-// the agent the two non-obvious contracts: the 1 MiB cap and the raw-byte
-// (no auto-Enter) rule (REQ-WT-007).
+// the agent the required policy, its true/false behavior, and the 1 MiB cap.
 func TestWriteTerminalDescription_StatesContract(t *testing.T) {
 	t.Parallel()
-	if !strings.Contains(WriteTerminalDescription, "1 MiB") {
-		t.Fatalf("WriteTerminalDescription missing 1 MiB cap mention; got %q", WriteTerminalDescription)
-	}
-	if !strings.Contains(WriteTerminalDescription, "auto-Enter") {
-		t.Fatalf("WriteTerminalDescription missing raw-byte (no auto-Enter) mention; got %q", WriteTerminalDescription)
+	for _, phrase := range []string{
+		"ensure_newline is required",
+		"true appends one trailing LF",
+		"false preserves bytes exactly",
+		"1 MiB",
+	} {
+		if !strings.Contains(WriteTerminalDescription, phrase) {
+			t.Fatalf("WriteTerminalDescription missing %q; got %q", phrase, WriteTerminalDescription)
+		}
 	}
 }
 

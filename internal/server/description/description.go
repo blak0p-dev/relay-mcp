@@ -29,8 +29,8 @@ const (
 
 // write_terminal constants. These are the single source of truth for the
 // tool name, summary, and full description registered with the MCP server
-// (REQ-WT-007). The description states the two non-obvious contracts: the
-// 1 MiB cap and the raw-byte (no auto-Enter) rule.
+// (REQ-WT-007). The description states the required newline policy and the
+// 1 MiB transmitted-payload cap.
 const (
 	// WriteTerminalName is the MCP tool name clients invoke.
 	WriteTerminalName = "write_terminal"
@@ -40,7 +40,7 @@ const (
 
 	// WriteTerminalDescription is the full description sent in the tool
 	// manifest. It tells the client what the tool does and how it behaves.
-	WriteTerminalDescription = "Writes raw bytes to the PTY of an active terminal session. The data is injected verbatim — no auto-Enter, no transformation. Maximum 1 MiB per call. Returns bytes_written and the current session state. Partial writes are not retried; the agent must resend the remainder."
+	WriteTerminalDescription = "Writes data to the PTY of an active terminal session. ensure_newline is required: true appends one trailing LF when absent; false preserves bytes exactly (no auto-Enter). Maximum 1 MiB per transmitted payload. Returns bytes_written and the current session state. Partial writes are not retried; the agent must resend the remainder."
 )
 
 // send_control constants are the single source of truth for the finite control
