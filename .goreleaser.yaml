@@ -34,5 +34,38 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+brews:
+  - name: relay
+    ids:
+      - relay
+    repository:
+      owner: blak0p
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/blak0p/relay-mcp"
+    description: "Interactive terminal MCP server for AI agents"
+    license: MIT
+    caveats: |
+      Homebrew installs the relay binary but does not configure MCP clients.
+      Register relay with your client using one of these commands:
+
+        claude mcp add --scope user relay -- "$(brew --prefix)/bin/relay"
+        codex mcp add relay -- "$(brew --prefix)/bin/relay"
+        opencode mcp add relay -- "$(brew --prefix)/bin/relay"
+
+      For Pi, run `pi install npm:pi-mcp-adapter` and add relay to:
+      ~/.config/mcp/mcp.json
+
+      Add this entry inside the existing `mcpServers` object, replacing the
+      command path with the output of `brew --prefix`:
+
+        "relay": {
+          "command": "/opt/homebrew/bin/relay"
+        }
+
+      More details:
+      https://github.com/blak0p/relay-mcp#client-setup-and-remediation
+
 snapshot:
   version_template: "{{ .Version }}"

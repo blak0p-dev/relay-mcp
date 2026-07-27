@@ -56,6 +56,24 @@ The installer reports when its destination is not on `PATH`; add that destinatio
 
 The MCP client drives Relay over stdin/stdout — no flags or server-side configuration are required.
 
+## Install with Homebrew
+
+The release workflow publishes a formula to the `blak0p/homebrew-tap` tap:
+
+```sh
+brew install blak0p/tap/relay
+```
+
+This installs the `relay` binary. Homebrew does not modify MCP client configuration; register the installed binary with the client you use, for example:
+
+```sh
+claude mcp add --scope user relay -- "$(brew --prefix)/bin/relay"
+```
+
+The formula is updated automatically when a version tag is released.
+
+After installation, Homebrew displays a reminder to register `relay` with your MCP client. The formula intentionally does not modify client configuration automatically.
+
 ## Client setup and remediation
 
 The installer detects available clients and configures one global/user registration named `relay`. Re-running it replaces that registration rather than adding duplicates. Missing clients are skipped and their exact command is printed.
@@ -68,6 +86,25 @@ The installer detects available clients and configures one global/user registrat
 | Pi | Installs `npm:pi-mcp-adapter` and upserts Relay | `pi install npm:pi-mcp-adapter`, then add Relay through Pi's supported MCP flow |
 
 For Pi, the installer updates only `mcpServers.relay` in `~/.config/mcp/mcp.json`; existing shared MCP entries are preserved. If you already manage that file, keep its other entries and add or update the Relay command to the installed binary. Restart or reload a client after changing its MCP configuration.
+
+With Homebrew, install the Pi adapter and add this entry to the existing `mcpServers` object in `~/.config/mcp/mcp.json`:
+
+```sh
+pi install npm:pi-mcp-adapter
+brew --prefix
+```
+
+```json
+{
+  "mcpServers": {
+    "relay": {
+      "command": "/opt/homebrew/bin/relay"
+    }
+  }
+}
+```
+
+Use `$(brew --prefix)/bin/relay` as the value conceptually; replace `/opt/homebrew` with the path printed by `brew --prefix` on your machine. Preserve any other entries already in `mcpServers`.
 
 ## Build from source
 
