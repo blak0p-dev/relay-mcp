@@ -592,7 +592,9 @@ func TestE2E_WriteTerminal_RequiresExplicitNewlinePolicy(t *testing.T) {
 		t.Fatalf("false bytes_written = %d, want %d", got.BytesWritten, len(falsePayload))
 	}
 
-	output := readTerminalSnapshot(t, probe, 6)
+	first := readTerminalSnapshotAtCursor(t, probe, 6, 0)
+	second := readTerminalSnapshotAtCursor(t, probe, 7, first.NextCursor)
+	output := first.Output + second.Output
 	if strings.Contains(output, invalidMarker) {
 		t.Fatalf("terminal output contains marker from rejected request: %q", output)
 	}
@@ -628,10 +630,19 @@ func callWriteTerminalWithPolicy(t *testing.T, probe *e2eProbe, id int, data str
 }
 
 func readTerminalSnapshot(t *testing.T, probe *e2eProbe, id int) string {
+	return readTerminalSnapshotAtCursor(t, probe, id, 0).Output
+}
+
+type terminalSnapshot struct {
+	Output     string `json:"output"`
+	NextCursor int64  `json:"next_cursor"`
+}
+
+func readTerminalSnapshotAtCursor(t *testing.T, probe *e2eProbe, id int, cursor int64) terminalSnapshot {
 	t.Helper()
 	response := probe.send(t, id, "tools/call", map[string]any{
 		"name":      "read_terminal",
-		"arguments": map[string]any{"mode": "snapshot", "wait_ms": 1000},
+		"arguments": map[string]any{"mode": "snapshot", "cursor": cursor, "wait_ms": 1000},
 	})
 	if response.Error != nil || response.Result == nil {
 		t.Fatalf("read_terminal response = %+v, want successful tool result", response)
@@ -645,13 +656,11 @@ func readTerminalSnapshot(t *testing.T, probe *e2eProbe, id int) string {
 	if err := json.Unmarshal(response.Result, &wrapper); err != nil || wrapper.IsError || len(wrapper.Content) != 1 {
 		t.Fatalf("read_terminal result = %s, err = %v", response.Result, err)
 	}
-	var result struct {
-		Output string `json:"output"`
-	}
+	var result terminalSnapshot
 	if err := json.Unmarshal([]byte(wrapper.Content[0].Text), &result); err != nil {
 		t.Fatalf("unmarshal read_terminal payload: %v", err)
 	}
-	return result.Output
+	return result
 }
 
 type sendControlResult struct {
