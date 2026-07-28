@@ -54,7 +54,15 @@ For a specific release, run `.\install-relay.ps1 -Version v1.2.3` instead. Both 
 
 The installer reports when its destination is not on `PATH`; add that destination and open a new shell before running `relay`. It does not edit shell profiles or system PATH settings automatically.
 
-The MCP client drives Relay over stdin/stdout — no flags or server-side configuration are required.
+## Interactive installer
+
+Run the installed `relay` binary with no arguments from a terminal to open the interactive installer. It guides install, update, and supported-client configuration without adding a second executable.
+
+Interactive mode starts only when both stdin and stdout are terminals. Every other invocation keeps the MCP stdio transport unchanged, so an MCP client can continue to launch `relay` over stdin/stdout without TUI output or extra flags.
+
+### Manual fallback
+
+The release scripts above remain the manual fallback when a terminal is unavailable or you prefer a scripted install. After installing, use the client-specific commands in [Client setup and remediation](#client-setup-and-remediation) to register the binary yourself.
 
 ## Install with Homebrew
 
@@ -72,11 +80,11 @@ claude mcp add --scope user relay -- "$(brew --prefix)/bin/relay"
 
 The formula is updated automatically when a version tag is released.
 
-After installation, Homebrew displays a reminder to register `relay` with your MCP client. The formula intentionally does not modify client configuration automatically.
+After installation, Homebrew displays a reminder to register `relay` with your MCP client. The formula intentionally does not modify client configuration automatically. Homebrew token remediation is explicitly out of scope for this change.
 
 ## Client setup and remediation
 
-The installer detects available clients and configures one global/user registration named `relay`. Re-running it replaces that registration rather than adding duplicates. Missing clients are skipped and their exact command is printed.
+The interactive installer detects available clients and configures one global/user registration named `relay`. Re-running it replaces that registration rather than adding duplicates. Missing clients are skipped and their exact command is printed.
 
 | Client | Automatic setup | Manual remediation |
 |---|---|---|

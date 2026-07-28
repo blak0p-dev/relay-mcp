@@ -40,6 +40,35 @@ jobs:
         run: bash scripts/install_test.sh
       - name: Verify release contracts
         run: bash scripts/release_test.sh --release-config
+      - name: Verify documentation contract
+        run: bash scripts/release_test.sh --docs-contract
+
+  cross-platform-build:
+    name: Cross-platform build (${{ matrix.goos }}/${{ matrix.goarch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build one Relay binary
+        run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build -o "relay${{ matrix.goos == 'windows' && '.exe' || '' }}" ./cmd/relay-mcp
 
   windows-installer:
     name: Test Windows installer runtime
