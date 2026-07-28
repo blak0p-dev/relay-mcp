@@ -1,13 +1,16 @@
 package tui
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/blak0p/relay-mcp/internal/clientconfig"
+	"github.com/blak0p/relay-mcp/internal/installer"
 )
 
 type Result struct {
@@ -16,17 +19,15 @@ type Result struct {
 }
 
 type Controller struct {
-	Clients   []clientconfig.Client
-	Maintain  func() Result
-	Configure func([]clientconfig.Client) Result
+	Clients     []clientconfig.Client
+	UpdateRelay func() Result
+	Configure   func([]clientconfig.Client) Result
 }
 
 func NewController(home string) Controller {
 	return Controller{
-		Clients: clientconfig.Detect(home),
-		Maintain: func() Result {
-			return Result{Err: errors.New("no verified release is selected"), Remediation: "Select a verified Relay release before maintenance."}
-		},
+		Clients:     clientconfig.Detect(home),
+		UpdateRelay: updateRelay,
 		Configure: func(clients []clientconfig.Client) Result {
 			var completed, failed []string
 			for _, client := range clients {
@@ -47,6 +48,22 @@ func NewController(home string) Controller {
 			return result
 		},
 	}
+}
+
+func updateRelay() Result {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result, err := (installer.Updater{}).Update(ctx)
+	if err != nil {
+		return Result{Err: err, Remediation: "Check your connection and retry; the existing Relay binary was not replaced."}
+	}
+	if result.Activation.AlreadyCurrent {
+		return Result{Summary: "Relay is already current (" + result.Version + ")."}
+	}
+	if result.Activation.Deferred {
+		return Result{Summary: fmt.Sprintf("Relay %s staged at %s; replacement did not complete.", result.Version, result.StagedPath), Remediation: "Exit Relay, then replace the executable from the staged path."}
+	}
+	return Result{Summary: "Relay updated to " + result.Version + "."}
 }
 
 type screen uint8
@@ -84,16 +101,16 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	switch m.screen {
 	case menu:
-		if key.Type == tea.KeyDown && m.cursor < 2 {
+		if (key.Type == tea.KeyDown || key.String() == "j") && m.cursor < 2 {
 			m.cursor++
 		}
-		if key.Type == tea.KeyUp && m.cursor > 0 {
+		if (key.Type == tea.KeyUp || key.String() == "k") && m.cursor > 0 {
 			m.cursor--
 		}
 		if key.Type == tea.KeyEnter {
 			switch m.cursor {
 			case 0:
-				m.action, m.screen = "Maintain Relay", confirm
+				m.action, m.screen = "Update Relay", confirm
 			case 1:
 				m.action, m.screen = "Configure clients", clients
 			default:
@@ -104,10 +121,10 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.controller.Clients) == 0 {
 			return m, nil
 		}
-		if key.Type == tea.KeyDown && m.cursor < len(m.controller.Clients)-1 {
+		if (key.Type == tea.KeyDown || key.String() == "j") && m.cursor < len(m.controller.Clients)-1 {
 			m.cursor++
 		}
-		if key.Type == tea.KeyUp && m.cursor > 0 {
+		if (key.Type == tea.KeyUp || key.String() == "k") && m.cursor > 0 {
 			m.cursor--
 		}
 		if key.String() == " " {
@@ -124,8 +141,8 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 		if key.String() == "y" {
 			m.screen, m.result = outcome, Result{Summary: "Working..."}
 			return m, func() tea.Msg {
-				if m.action == "Maintain Relay" {
-					return resultMsg(m.controller.Maintain())
+				if m.action == "Update Relay" {
+					return resultMsg(m.controller.UpdateRelay())
 				}
 				return resultMsg(m.controller.Configure(m.controller.Clients))
 			}
@@ -140,7 +157,7 @@ func (m Model) Update(message tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	switch m.screen {
 	case menu:
-		items := []string{"Maintain Relay", "Configure clients", "Quit"}
+		items := []string{"Update Relay", "Configure clients", "Quit"}
 		return "Relay installer\n\n" + menuView(items, m.cursor)
 	case clients:
 		if len(m.controller.Clients) == 0 {
@@ -184,6 +201,6 @@ func menuView(items []string, cursor int) string {
 }
 
 func Run(home string) error {
-	_, err := tea.NewProgram(NewModel(NewController(home))).Run()
+	_, err := tea.NewProgram(NewModel(NewController(home)), tea.WithAltScreen()).Run()
 	return err
 }

@@ -75,11 +75,35 @@ func TestRelayBinary_DualTTYLaunchSelectsInteractivePath(t *testing.T) {
 	if got := output.String(); !strings.Contains(got, "Relay installer") {
 		t.Fatalf("dual-TTY output = %q, want installer marker", got)
 	}
+	if got := output.String(); !strings.Contains(got, "\x1b[?1049h") {
+		t.Fatalf("dual-TTY output = %q, want alt-screen entry", got)
+	}
 	if _, err := terminal.Write([]byte("q")); err != nil {
 		t.Fatalf("send TUI quit key: %v", err)
 	}
+	for !strings.Contains(output.String(), "\x1b[?1049l") {
+		read := make(chan error, 1)
+		go func() {
+			n, err := terminal.Read(buffer)
+			if err == nil {
+				output.Write(buffer[:n])
+			}
+			read <- err
+		}()
+		select {
+		case readErr := <-read:
+			if readErr != nil {
+				t.Fatalf("read TUI cleanup: %v", readErr)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for TUI alt-screen cleanup")
+		}
+	}
 	if waitErr := cmd.Wait(); waitErr != nil {
 		t.Fatalf("dual-TTY launch exit = %v, want success", waitErr)
+	}
+	if got := output.String(); !strings.Contains(got, "\x1b[?1049l") {
+		t.Fatalf("dual-TTY output = %q, want alt-screen cleanup", got)
 	}
 }
 

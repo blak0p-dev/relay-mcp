@@ -48,7 +48,7 @@ func TestSmokeConfiguresClientAndExits(t *testing.T) {
 func TestModelHandlesCancellationNoClientsAndRemediation(t *testing.T) {
 	mutated := false
 	model := NewModel(Controller{
-		Maintain: func() Result { mutated = true; return Result{} },
+		UpdateRelay: func() Result { mutated = true; return Result{} },
 		Configure: func([]clientconfig.Client) Result {
 			mutated = true
 			return Result{Summary: "partial", Remediation: "Fix codex permissions"}
@@ -62,7 +62,7 @@ func TestModelHandlesCancellationNoClientsAndRemediation(t *testing.T) {
 	if mutated {
 		t.Fatal("no-client guidance mutated configuration")
 	}
-	model = NewModel(Controller{Maintain: func() Result { mutated = true; return Result{Summary: "changed"} }})
+	model = NewModel(Controller{UpdateRelay: func() Result { mutated = true; return Result{Summary: "changed"} }})
 	model = update(t, model, tea.KeyMsg{Type: tea.KeyEnter})
 	model = update(t, model, tea.KeyMsg{Type: tea.KeyEsc})
 	if mutated || !strings.Contains(model.View(), "Cancelled") {
@@ -78,6 +78,55 @@ func TestModelHandlesCancellationNoClientsAndRemediation(t *testing.T) {
 	model = update(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
 	if !strings.Contains(model.View(), "codex failed") || !strings.Contains(model.View(), "Fix codex permissions") {
 		t.Fatalf("remediation view = %q", model.View())
+	}
+}
+
+func TestModelUpdatesRelayTruthfullyAndSupportsVimNavigation(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		result Result
+		want   string
+	}{
+		{"completed", Result{Summary: "Relay updated to 1.2.3"}, "Relay updated to 1.2.3"},
+		{"current", Result{Summary: "Relay is already current"}, "Relay is already current"},
+		{"deferred", Result{Summary: "Relay 1.2.3 staged; replacement did not complete", Remediation: "Exit Relay, then replace from /tmp/relay"}, "did not complete"},
+		{"error", Result{Err: errors.New("verification failed"), Remediation: "Retry when online"}, "verification failed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			calls := 0
+			model := NewModel(Controller{UpdateRelay: func() Result { calls++; return tt.result }})
+			if !strings.Contains(model.View(), "Update Relay") {
+				t.Fatalf("menu = %q", model.View())
+			}
+			model = update(t, model, tea.KeyMsg{Type: tea.KeyEnter})
+			model = update(t, model, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("y")})
+			if calls != 1 || !strings.Contains(model.View(), tt.want) {
+				t.Fatalf("outcome = %q, calls = %d", model.View(), calls)
+			}
+		})
+	}
+	controller := Controller{Clients: []clientconfig.Client{{Name: "claude"}, {Name: "codex"}}}
+	for _, tt := range []struct {
+		name  string
+		model Model
+		key   tea.KeyMsg
+		want  int
+	}{
+		{"menu down arrow", NewModel(controller), tea.KeyMsg{Type: tea.KeyDown}, 1},
+		{"menu j", NewModel(controller), tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}, 1},
+		{"menu up arrow", Model{controller: controller, screen: menu, cursor: 1}, tea.KeyMsg{Type: tea.KeyUp}, 0},
+		{"menu k", Model{controller: controller, screen: menu, cursor: 1}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}, 0},
+		{"clients down arrow", Model{controller: controller, screen: clients}, tea.KeyMsg{Type: tea.KeyDown}, 1},
+		{"clients j", Model{controller: controller, screen: clients}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")}, 1},
+		{"clients up arrow", Model{controller: controller, screen: clients, cursor: 1}, tea.KeyMsg{Type: tea.KeyUp}, 0},
+		{"clients k", Model{controller: controller, screen: clients, cursor: 1}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")}, 0},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			model := update(t, tt.model, tt.key)
+			if model.cursor != tt.want {
+				t.Fatalf("cursor = %d, want %d", model.cursor, tt.want)
+			}
+		})
 	}
 }
 

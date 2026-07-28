@@ -3,6 +3,7 @@ package installer
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -24,6 +25,7 @@ type Request struct {
 	ArtifactURL, ChecksumURL, Target, StagingDir string
 	MaxBytes                                     int64
 	Client                                       *http.Client
+	Format                                       ArchiveFormat
 }
 
 // Acquire downloads an HTTPS artifact, verifies its published checksum, and stages its sole Relay executable.
@@ -43,7 +45,15 @@ func Acquire(ctx context.Context, request Request) (string, error) {
 	if !validChecksum(checksums, name, archive) {
 		return "", errors.New("release checksum verification failed")
 	}
-	return extract(bytes.NewReader(archive), request.Target, request.StagingDir, limit(request.MaxBytes))
+	max := limit(request.MaxBytes)
+	switch request.Format {
+	case "", TarGz:
+		return extract(bytes.NewReader(archive), request.Target, request.StagingDir, max)
+	case Zip:
+		return extractZIP(archive, request.Target, request.StagingDir, max)
+	default:
+		return "", errors.New("unsupported release archive format")
+	}
 }
 
 func limit(value int64) int64 {
@@ -114,6 +124,19 @@ func extract(archive io.Reader, target, directory string, max int64) (string, er
 	reader := tar.NewReader(io.LimitReader(gzipReader, max+1))
 	var staged string
 	var total int64
+	allowed := map[string]bool{target: true}
+	if target == "relay" {
+		allowed["CHANGELOG.md"] = true
+		allowed["LICENSE"] = true
+		allowed["README.md"] = true
+	}
+	seen := make(map[string]bool, len(allowed))
+	success := false
+	defer func() {
+		if !success && staged != "" {
+			_ = os.Remove(staged)
+		}
+	}()
 	for {
 		header, err := reader.Next()
 		if err == io.EOF {
@@ -125,11 +148,20 @@ func extract(archive io.Reader, target, directory string, max int64) (string, er
 		if header.Typeflag != tar.TypeReg {
 			return "", errors.New("release archive contains non-regular member")
 		}
-		if header.Name != target {
+		if !allowed[header.Name] {
 			return "", errors.New("release archive must contain exactly one root Relay executable")
 		}
-		if staged != "" {
+		if seen[header.Name] {
 			return "", errors.New("release archive has duplicate Relay executable")
+		}
+		seen[header.Name] = true
+		if header.Name != target {
+			written, err := io.Copy(io.Discard, io.LimitReader(reader, max-total+1))
+			total += written
+			if err != nil || total > max {
+				return "", errors.New("release archive exceeds staging limit")
+			}
+			continue
 		}
 		file, err := os.CreateTemp(directory, ".relay-stage-*")
 		if err != nil {
@@ -140,6 +172,51 @@ func extract(archive io.Reader, target, directory string, max int64) (string, er
 		total += written
 		closeErr := file.Close()
 		if err != nil || closeErr != nil || total > max {
+			return "", errors.New("release archive exceeds staging limit")
+		}
+		if err := os.Chmod(staged, 0o755); err != nil {
+			return "", err
+		}
+	}
+	canonicalLayout := target == "relay" && len(seen) == len(allowed)
+	if staged == "" || (len(seen) != 1 && !canonicalLayout) {
+		return "", errors.New("release archive has no Relay executable")
+	}
+	success = true
+	return staged, nil
+}
+
+func extractZIP(archive []byte, target, directory string, max int64) (string, error) {
+	reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+	if err != nil {
+		return "", errors.New("release archive must be ZIP")
+	}
+	var staged string
+	var total int64
+	for _, file := range reader.File {
+		if file.Name != target || file.FileInfo().Mode()&os.ModeType != 0 {
+			return "", errors.New("release archive must contain exactly one root Relay executable")
+		}
+		if staged != "" {
+			return "", errors.New("release archive has duplicate Relay executable")
+		}
+		if file.UncompressedSize64 > uint64(max) {
+			return "", errors.New("release archive exceeds staging limit")
+		}
+		in, err := file.Open()
+		if err != nil {
+			return "", err
+		}
+		out, err := os.CreateTemp(directory, ".relay-stage-*")
+		if err != nil {
+			_ = in.Close()
+			return "", err
+		}
+		staged = out.Name()
+		written, copyErr := io.Copy(out, io.LimitReader(in, max-total+1))
+		total += written
+		closeErr, inCloseErr := out.Close(), in.Close()
+		if copyErr != nil || closeErr != nil || inCloseErr != nil || total > max {
 			_ = os.Remove(staged)
 			return "", errors.New("release archive exceeds staging limit")
 		}
