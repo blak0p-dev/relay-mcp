@@ -23,6 +23,7 @@ import (
 	"github.com/blak0p/relay-mcp/internal/entrypoint"
 	"github.com/blak0p/relay-mcp/internal/server/server"
 	"github.com/blak0p/relay-mcp/internal/session/registry"
+	"github.com/blak0p/relay-mcp/internal/tui"
 )
 
 func main() {
@@ -57,11 +58,12 @@ func isTerminal(file *os.File) bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-// runInteractive is intentionally a narrow seam until the later TUI work unit
-// supplies the Bubble Tea runner. It never writes to stdout, which keeps the
-// MCP protocol channel pure for every noninteractive invocation.
 func runInteractive() error {
-	return fmt.Errorf("interactive mode is not available yet")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+	return tui.Run(home)
 }
 
 // runMCP is the unchanged MCP stdio runner.

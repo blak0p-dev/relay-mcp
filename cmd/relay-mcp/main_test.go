@@ -3,14 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
-	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"syscall"
 	"testing"
+	"time"
 
 	"github.com/creack/pty"
 )
@@ -50,15 +48,38 @@ func TestRelayBinary_DualTTYLaunchSelectsInteractivePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("start relay binary in PTY: %v", err)
 	}
-	output, readErr := io.ReadAll(terminal)
-	if waitErr := cmd.Wait(); waitErr == nil {
-		t.Fatal("dual-TTY launch exited successfully, want the temporary interactive seam error")
+	defer terminal.Close()
+	if _, err := terminal.Write([]byte("\x1b[24;80R\x1b]11;rgb:0000/0000/0000\x1b\\")); err != nil {
+		t.Fatalf("answer TUI terminal queries: %v", err)
 	}
-	if readErr != nil && !errors.Is(readErr, os.ErrClosed) && !errors.Is(readErr, syscall.EIO) {
-		t.Fatalf("read PTY output: %v", readErr)
+	buffer := make([]byte, 4096)
+	var output strings.Builder
+	for !strings.Contains(output.String(), "Relay installer") {
+		read := make(chan error, 1)
+		go func() {
+			n, err := terminal.Read(buffer)
+			if err == nil {
+				output.Write(buffer[:n])
+			}
+			read <- err
+		}()
+		select {
+		case readErr := <-read:
+			if readErr != nil {
+				t.Fatalf("read TUI output: %v", readErr)
+			}
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for installer TUI")
+		}
 	}
-	if !strings.Contains(string(output), "interactive mode is not available yet") {
-		t.Fatalf("dual-TTY output = %q, want interactive-path marker", output)
+	if got := output.String(); !strings.Contains(got, "Relay installer") {
+		t.Fatalf("dual-TTY output = %q, want installer marker", got)
+	}
+	if _, err := terminal.Write([]byte("q")); err != nil {
+		t.Fatalf("send TUI quit key: %v", err)
+	}
+	if waitErr := cmd.Wait(); waitErr != nil {
+		t.Fatalf("dual-TTY launch exit = %v, want success", waitErr)
 	}
 }
 
