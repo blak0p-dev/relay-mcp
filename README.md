@@ -20,6 +20,14 @@ Relay lets AI agents spawn real PTY sessions — bash, python, lazygit, whatever
 
 5 tools, well made. Covers 90% of real agent-terminal interaction.
 
+## Quick start
+
+1. Install `relay` with the command for your platform.
+2. Open a terminal and run `relay`.
+3. In the full-screen installer, select **Configure clients** and confirm the preselected clients.
+
+That is the normal setup path. You do not need to manually add Relay to Claude Code, Codex, OpenCode, or Pi when the interactive installer detects and configures them.
+
 ## Install a release
 
 Install a verified, no-sudo release for your platform. The installers support Linux and macOS on amd64 or arm64, and Windows on amd64 or arm64. They place `relay` in `$GOBIN` when set, otherwise in `$HOME/go/bin` (`$HOME\go\bin` on Windows).
@@ -28,14 +36,7 @@ Install a verified, no-sudo release for your platform. The installers support Li
 
 ```sh
 curl --fail --show-error --location --proto '=https' \
-  https://raw.githubusercontent.com/blak0p-dev/relay-mcp/main/scripts/install.sh | bash
-```
-
-To install a specific release, pass its tag:
-
-```sh
-curl --fail --show-error --location --proto '=https' \
-  https://raw.githubusercontent.com/blak0p-dev/relay-mcp/main/scripts/install.sh | bash -s -- --version v1.2.3
+  https://raw.githubusercontent.com/blak0p/relay-mcp/main/scripts/install.sh | bash
 ```
 
 ### Windows
@@ -43,12 +44,12 @@ curl --fail --show-error --location --proto '=https' \
 In PowerShell:
 
 ```powershell
-Invoke-WebRequest https://raw.githubusercontent.com/blak0p-dev/relay-mcp/main/scripts/install.ps1 -OutFile .\install-relay.ps1
+Invoke-WebRequest https://raw.githubusercontent.com/blak0p/relay-mcp/main/scripts/install.ps1 -OutFile .\install-relay.ps1
 .\install-relay.ps1
 Remove-Item .\install-relay.ps1
 ```
 
-For a specific release, run `.\install-relay.ps1 -Version v1.2.3` instead. Both installers download the matching archive and `checksums.txt`, verify SHA-256 before replacement, and keep an existing binary unchanged if verification fails. They never invoke `sudo`.
+For a specific release, run `.\install-relay.ps1 -Version v0.2.0` instead. Both installers download the matching archive and `checksums.txt`, verify SHA-256 before replacement, and keep an existing binary unchanged if verification fails. They never invoke `sudo`.
 
 ### PATH
 
@@ -56,13 +57,22 @@ The installer reports when its destination is not on `PATH`; add that destinatio
 
 ## Interactive installer
 
-Run the installed `relay` binary with no arguments from a terminal to open the interactive installer. It guides install, update, and supported-client configuration without adding a second executable.
+Run the installed `relay` binary with no arguments from a terminal to open the interactive installer. It provides a full-screen terminal UI for updating Relay and configuring supported clients without adding a second executable.
+
+Choose an action with the arrow keys or `j`/`k`, then press Enter. In the client screen, use Space to toggle selections. Relay detects Claude Code, Codex, OpenCode, and Pi from their local configuration files and preselects the clients it finds:
+
+| Client | Detection path |
+|---|---|
+| Claude Code | `~/.claude.json` |
+| Codex | `~/.codex/config.toml` |
+| OpenCode | `~/.config/opencode/opencode.json` |
+| Pi | `~/.pi/agent/settings.json` |
 
 Interactive mode starts only when both stdin and stdout are terminals. Every other invocation keeps the MCP stdio transport unchanged, so an MCP client can continue to launch `relay` over stdin/stdout without TUI output or extra flags.
 
 ### Manual fallback
 
-The release scripts above remain the manual fallback when a terminal is unavailable or you prefer a scripted install. After installing, use the client-specific commands in [Client setup and remediation](#client-setup-and-remediation) to register the binary yourself.
+The release scripts above install the binary. If you have a terminal, run `relay` afterwards and let the interactive installer configure your detected clients. Use the client-specific commands in [Client setup and remediation](#client-setup-and-remediation) only when a terminal is unavailable or a client is not detected.
 
 ## Install with Homebrew
 
@@ -72,7 +82,7 @@ The release workflow publishes a formula to the `blak0p/homebrew-tap` tap:
 brew install blak0p/tap/relay
 ```
 
-This installs the `relay` binary. Homebrew does not modify MCP client configuration; register the installed binary with the client you use, for example:
+This installs the `relay` binary. Then run `relay` in a terminal to configure detected MCP clients through the interactive installer. If that is not available, register the installed binary manually, for example:
 
 ```sh
 claude mcp add --scope user relay -- "$(brew --prefix)/bin/relay"
@@ -84,40 +94,39 @@ After installation, Homebrew displays a reminder to register `relay` with your M
 
 ## Client setup and remediation
 
-The interactive installer detects available clients and configures one global/user registration named `relay`. Re-running it replaces that registration rather than adding duplicates. Missing clients are skipped and their exact command is printed.
+The interactive installer detects available clients, preselects those with an existing local configuration file, and configures one global/user registration named `relay`. Re-running it replaces that registration rather than adding duplicates. Missing clients are left unselected; their exact command is printed for manual setup.
 
 | Client | Automatic setup | Manual remediation |
 |---|---|---|
 | Claude Code | User scope | `claude mcp add --scope user relay -- /absolute/path/to/relay` |
 | Codex | User configuration | `codex mcp add relay -- /absolute/path/to/relay` |
 | OpenCode | User configuration | `opencode mcp add relay -- /absolute/path/to/relay` |
-| Pi | Installs `npm:pi-mcp-adapter` and upserts Relay | `pi install npm:pi-mcp-adapter`, then add Relay through Pi's supported MCP flow |
+| Pi | Updates `~/.pi/agent/settings.json` | `pi mcp add relay -- /absolute/path/to/relay` |
 
-For Pi, the installer updates only `mcpServers.relay` in `~/.config/mcp/mcp.json`; existing shared MCP entries are preserved. If you already manage that file, keep its other entries and add or update the Relay command to the installed binary. Restart or reload a client after changing its MCP configuration.
+For Pi, the installer updates only `mcpServers.relay` in `~/.pi/agent/settings.json`; existing Pi settings are preserved. If you already manage that file, keep its other entries and add or update the Relay command to the installed binary. Restart or reload a client after changing its MCP configuration.
 
-With Homebrew, install the Pi adapter and add this entry to the existing `mcpServers` object in `~/.config/mcp/mcp.json`:
+With Homebrew, add this entry to the existing `mcpServers` object in `~/.pi/agent/settings.json`:
 
 ```sh
-pi install npm:pi-mcp-adapter
-brew --prefix
+  brew --prefix
 ```
 
 ```json
 {
   "mcpServers": {
     "relay": {
-      "command": "/opt/homebrew/bin/relay"
+      "command": "relay"
     }
   }
 }
 ```
 
-Use `$(brew --prefix)/bin/relay` as the value conceptually; replace `/opt/homebrew` with the path printed by `brew --prefix` on your machine. Preserve any other entries already in `mcpServers`.
+The installer records `relay`, so ensure the Homebrew bin directory is on `PATH`. Preserve any other entries already in `mcpServers`.
 
 ## Build from source
 
 ```sh
-git clone https://github.com/blak0p-dev/relay-mcp.git
+git clone https://github.com/blak0p/relay-mcp.git
 cd relay-mcp
 go build -o relay ./cmd/relay-mcp
 ./relay
@@ -135,7 +144,7 @@ codex mcp remove relay
 opencode mcp remove relay
 ```
 
-On Windows, remove `$env:GOBIN\relay.exe` when `GOBIN` is set, otherwise remove `$HOME\go\bin\relay.exe`. For Pi, remove only `mcpServers.relay` from `~/.config/mcp/mcp.json`; do not delete unrelated shared entries. Reinstall a known-good version with the versioned installer command above if you need to roll back to a prior release.
+On Windows, remove `$env:GOBIN\relay.exe` when `GOBIN` is set, otherwise remove `$HOME\go\bin\relay.exe`. For Pi, remove only `mcpServers.relay` from `~/.pi/agent/settings.json`; do not delete unrelated settings. Reinstall a known-good version with the versioned installer command above if you need to roll back to a prior release.
 
 ## Architecture
 
