@@ -179,11 +179,36 @@ verify_ci_config() {
     'shell: pwsh'
     './scripts/install_test.ps1'
     'bash scripts/release_test.sh --release-config'
+    'cross-platform-build:'
+    'GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} CGO_ENABLED=0 go build'
   )
   local value
   for value in "${required[@]}"; do
     require_line "$CI_WORKFLOW" "$value" || return 1
   done
+}
+
+verify_docs_contract() {
+  local readme="$ROOT/README.md"
+  local development="$ROOT/docs/development.md"
+
+  [[ -f "$readme" ]] || { printf 'missing %s\n' "$readme" >&2; return 1; }
+  [[ -f "$development" ]] || { printf 'missing %s\n' "$development" >&2; return 1; }
+
+  local required_readme=(
+    'Interactive installer'
+    'both stdin and stdout are terminals'
+    'MCP stdio transport'
+    'Manual fallback'
+    'Homebrew token remediation is explicitly out of scope'
+  )
+  local value
+  for value in "${required_readme[@]}"; do
+    require_line "$readme" "$value" || return 1
+  done
+
+  require_line "$development" 'Cross-platform release contract' || return 1
+  require_line "$development" 'relay_<version>_<os>_<arch>' || return 1
 }
 
 main() {
@@ -204,6 +229,10 @@ main() {
     --ci-config)
       [[ "$#" -eq 1 ]] || { printf 'usage: %s [--red|--release-config|--ci-config]\n' "${0##*/}" >&2; return 2; }
       verify_ci_config
+      ;;
+    --docs-contract)
+      [[ "$#" -eq 1 ]] || { printf 'usage: %s [--red|--release-config|--ci-config|--docs-contract]\n' "${0##*/}" >&2; return 2; }
+      verify_docs_contract
       ;;
     *)
       printf 'usage: %s [--red|--release-config|--ci-config]\n' "${0##*/}" >&2

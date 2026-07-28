@@ -20,8 +20,10 @@ import (
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
 
+	"github.com/blak0p/relay-mcp/internal/entrypoint"
 	"github.com/blak0p/relay-mcp/internal/server/server"
 	"github.com/blak0p/relay-mcp/internal/session/registry"
+	"github.com/blak0p/relay-mcp/internal/tui"
 )
 
 func main() {
@@ -35,10 +37,37 @@ func writeError(w io.Writer, err error) {
 	fmt.Fprintf(w, "relay: %v\n", err)
 }
 
-// run is the testable body of main: it wires the registry, the MCP server,
-// the stdio transport, and the signal handler. Splitting it out of main lets
-// future tests drive the wiring without exec'ing the binary.
+// run selects the interactive path only for a zero-argument dual-TTY launch.
+// All other invocations retain the existing MCP stdio runner.
 func run() error {
+	return runWithTTY(os.Args[1:], isTerminal(os.Stdin), isTerminal(os.Stdout), runInteractive, runMCP)
+}
+
+func runWithTTY(args []string, stdinTTY, stdoutTTY bool, interactive, mcp func() error) error {
+	if entrypoint.Decide(args, stdinTTY, stdoutTTY) == entrypoint.Interactive {
+		return interactive()
+	}
+	return mcp()
+}
+
+func isTerminal(file *os.File) bool {
+	if file == nil {
+		return false
+	}
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
+}
+
+func runInteractive() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve home directory: %w", err)
+	}
+	return tui.Run(home)
+}
+
+// runMCP is the unchanged MCP stdio runner.
+func runMCP() error {
 	reg := registry.NewRegistry()
 	s, err := server.NewServer(reg)
 	if err != nil {
