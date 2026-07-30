@@ -157,7 +157,7 @@ func TestNewServer_RegistersReadTerminalTool(t *testing.T) {
 	assertReadStringProperty(t, props, "mode", []string{"stream", "snapshot", "drain"})
 	assertReadIntegerProperty(t, props, "cursor", 0, nil)
 	assertReadIntegerProperty(t, props, "max_bytes", 1, 65536)
-	assertReadIntegerProperty(t, props, "wait_ms", 0, 1000)
+	assertReadIntegerProperty(t, props, "wait_ms", 0, 5000)
 	if len(read.Tool.InputSchema.Required) != 0 {
 		t.Fatalf("read_terminal required fields = %v, want none", read.Tool.InputSchema.Required)
 	}

@@ -21,7 +21,7 @@ const (
 	DefaultWait = 100 * time.Millisecond
 
 	// MaxWait is the longest an empty snapshot may wait for a state change.
-	MaxWait = time.Second
+	MaxWait = 5 * time.Second
 )
 
 // Status describes the terminal lifecycle state observed with retained output.
