@@ -290,15 +290,19 @@ func (s *Session) Shutdown(grace time.Duration) (CloseResult, error) {
 	}
 	select {
 	case <-waitDone:
+		// SIGTERM is the intentional close request. Bash reports that signal
+		// as a non-zero exit, but the close itself completed cleanly.
+		result.State = StateExited
+		result.ExitCode = 0
 	case <-time.After(grace):
 		if err := s.signalGroup(pid, forceKillSignal()); err != nil && !isMissingProcessError(err) {
 			return s.failShutdown(result, fmt.Errorf("force terminate process group %d: %w", pid, err))
 		}
 		<-waitDone
-	}
-	result.State = classifyExit(s.Cmd)
-	if s.Cmd.ProcessState != nil && s.Cmd.ProcessState.Exited() {
-		result.ExitCode = s.Cmd.ProcessState.ExitCode()
+		result.State = classifyExit(s.Cmd)
+		if s.Cmd.ProcessState != nil && s.Cmd.ProcessState.Exited() {
+			result.ExitCode = s.Cmd.ProcessState.ExitCode()
+		}
 	}
 	return s.finishShutdown(result)
 }

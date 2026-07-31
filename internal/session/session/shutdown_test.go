@@ -73,8 +73,8 @@ func TestSessionShutdown_SharesOneWaitWithOutputReader(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shutdown() error = %v", err)
 	}
-	if result.State != StateError {
-		t.Fatalf("Shutdown() state = %q, want %q after SIGTERM", result.State, StateError)
+	if result.State != StateExited || result.ExitCode != 0 {
+		t.Fatalf("Shutdown() result = %#v, want clean exit after SIGTERM", result)
 	}
 	select {
 	case <-s.outputDone:
