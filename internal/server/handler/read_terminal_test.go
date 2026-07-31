@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +37,29 @@ func TestReadTerminalSnapshotAndDrain(t *testing.T) {
 				t.Fatalf("result = %+v, want %+v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestReadTerminalDrainRawArgumentsCapsOutput(t *testing.T) {
+	res, err := NewReadTerminalHandler(seededReadRegistry(t, strings.Repeat("x", 4097)))(
+		context.Background(),
+		mcp.CallToolRequest{Params: mcp.CallToolParams{
+			Name:         "read_terminal",
+			RawArguments: json.RawMessage(`{"mode":"drain","max_bytes":4096,"wait_ms":1000}`),
+		}},
+	)
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	got := extractReadResult(t, res)
+	if got.Status != "running" {
+		t.Fatalf("status = %q, want running", got.Status)
+	}
+	if len(got.Output) != 4096 {
+		t.Fatalf("output length = %d, want 4096", len(got.Output))
+	}
+	if got.NextCursor != 4096 {
+		t.Fatalf("next cursor = %d, want 4096", got.NextCursor)
 	}
 }
 
