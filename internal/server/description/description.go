@@ -54,7 +54,7 @@ const (
 
 	// SendControlDescription describes the finite key allowlist and its active
 	// session-only delivery contract.
-	SendControlDescription = "Sends one allowlisted terminal control key to the active session. Keys are normalized for case and surrounding whitespace; arbitrary bytes, key combinations, and session targeting are not accepted. Returns the canonical key and bytes_sent. Partial writes fail and are not retried."
+	SendControlDescription = "Sends one allowlisted terminal control key as raw PTY bytes to the active session. The foreground application, including readline, owns pending input state; escape and tab do not guarantee line cancellation. Keys are normalized for case and surrounding whitespace; arbitrary bytes, key combinations, and session targeting are not accepted. For Bash specifically, when a partial line may remain, the client can send ctrl+c before an unrelated command; this is a cautious recovery step, not a universal guarantee. Returns the canonical key and bytes_sent. Partial writes fail and are not retried."
 )
 
 // read_terminal constants are the single source of truth for the tool's
