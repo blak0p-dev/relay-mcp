@@ -35,7 +35,11 @@ func TestSessionShutdown_ForceKillsProcessGroupAfterGrace(t *testing.T) {
 	}
 
 	s, _ := startShutdownTestSession(t, "trap '' TERM; while :; do sleep 1; done & echo $!; wait")
-	done := make(chan error, 1)
+	type shutdownResult struct {
+		result CloseResult
+		err    error
+	}
+	done := make(chan shutdownResult, 1)
 	t.Cleanup(func() {
 		_ = unix.Kill(-s.PID, unix.SIGKILL)
 		select {
@@ -45,14 +49,17 @@ func TestSessionShutdown_ForceKillsProcessGroupAfterGrace(t *testing.T) {
 	})
 
 	go func() {
-		_, err := s.Shutdown(100 * time.Millisecond)
-		done <- err
+		result, err := s.Shutdown(100 * time.Millisecond)
+		done <- shutdownResult{result: result, err: err}
 	}()
 
 	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("Shutdown() error = %v", err)
+	case outcome := <-done:
+		if outcome.err != nil {
+			t.Fatalf("Shutdown() error = %v", outcome.err)
+		}
+		if outcome.result.State != StateError || outcome.result.ExitCode != -1 {
+			t.Fatalf("Shutdown() result = %#v, want StateError with exit code -1", outcome.result)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("Shutdown() did not force-kill the process group after the grace period")
