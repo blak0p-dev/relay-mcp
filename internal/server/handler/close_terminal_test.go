@@ -80,8 +80,8 @@ func TestCloseTerminalHandler_MatchingAndIdempotent(t *testing.T) {
 		t.Fatalf("matching close returned Go error: %v", err)
 	}
 	got := extractCloseResult(t, res)
-	if !got.Closed || got.Status != string(session.StateError) || got.ExitCode != -1 {
-		t.Fatalf("matching close = %#v, want closed error session with unavailable exit code", got)
+	if !got.Closed || got.Status != string(session.StateExited) || got.ExitCode != 0 {
+		t.Fatalf("matching close = %#v, want cleanly closed session with exit code 0", got)
 	}
 
 	retry, err := h(context.Background(), newCloseRequest(s.ID))
