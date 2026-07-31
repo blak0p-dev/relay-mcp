@@ -76,8 +76,8 @@ func NewServer(reg *registry.Registry) (*mcpserver.MCPServer, error) {
 		),
 		mcp.WithInteger("wait_ms",
 			mcp.Min(0),
-			mcp.Max(1000),
-			mcp.Description("Maximum snapshot or drain wait in milliseconds (0 through 1000)."),
+			mcp.Max(5000),
+			mcp.Description("Maximum snapshot or drain wait in milliseconds (0 through 5000)."),
 		),
 	)
 	s.AddTool(readTool, handler.NewReadTerminalHandler(reg))

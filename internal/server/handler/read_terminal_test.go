@@ -57,6 +57,19 @@ func TestReadTerminalSnapshotWithoutWaitUsesDefaultTimeout(t *testing.T) {
 	}
 }
 
+func TestReadTerminalSnapshotAcceptsMaximumWait(t *testing.T) {
+	res, err := NewReadTerminalHandler(seededReadRegistry(t, "ready"))(context.Background(), readRequest(map[string]any{
+		"mode":    "snapshot",
+		"wait_ms": 5000,
+	}, nil))
+	if err != nil {
+		t.Fatalf("handler returned Go error: %v", err)
+	}
+	if got, want := extractReadResult(t, res).Output, "ready"; got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+}
+
 func TestReadTerminalStableErrors(t *testing.T) {
 	for _, tt := range []struct {
 		name   string
@@ -69,7 +82,7 @@ func TestReadTerminalStableErrors(t *testing.T) {
 		{"stream needs token", func(t *testing.T) *registry.Registry { return seededReadRegistry(t, "") }, map[string]any{}, nil, "stream_requires_progress_token"},
 		{"invalid read request", func(t *testing.T) *registry.Registry { return seededReadRegistry(t, "") }, map[string]any{"mode": "snapshot", "max_bytes": 0}, nil, "invalid_read_request"},
 		{"maximum bytes is bounded", func(t *testing.T) *registry.Registry { return seededReadRegistry(t, "") }, map[string]any{"mode": "snapshot", "max_bytes": output.MaxReadBytes + 1}, nil, "invalid_read_request"},
-		{"wait is bounded", func(t *testing.T) *registry.Registry { return seededReadRegistry(t, "") }, map[string]any{"mode": "drain", "wait_ms": 1001}, nil, "invalid_read_request"},
+		{"wait is bounded", func(t *testing.T) *registry.Registry { return seededReadRegistry(t, "") }, map[string]any{"mode": "snapshot", "wait_ms": 5001}, nil, "invalid_read_request"},
 		{"closed session", closedReadRegistry, map[string]any{"mode": "snapshot"}, nil, "session_closed"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
