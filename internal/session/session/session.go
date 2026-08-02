@@ -281,6 +281,17 @@ func (s *Session) Shutdown(grace time.Duration) (CloseResult, error) {
 		pid = s.Cmd.Process.Pid
 	}
 	if err := s.signalGroup(pid, terminateSignal()); err != nil {
+		if isMissingProcessError(err) {
+			// The process can exit after the liveness check but before SIGTERM.
+			// Reap it and report the completed clean close instead of turning
+			// this harmless race into a cleanup failure.
+			_ = s.wait()
+			result.State = classifyExit(s.Cmd)
+			if s.Cmd.ProcessState != nil && s.Cmd.ProcessState.Exited() {
+				result.ExitCode = s.Cmd.ProcessState.ExitCode()
+			}
+			return s.finishShutdown(result)
+		}
 		return s.failShutdown(result, fmt.Errorf("terminate process group %d: %w", pid, err))
 	}
 	waitDone := make(chan error, 1)
@@ -290,7 +301,7 @@ func (s *Session) Shutdown(grace time.Duration) (CloseResult, error) {
 	}
 	select {
 	case <-waitDone:
-		// SIGTERM is the intentional close request. Bash reports that signal
+		// SIGHUP is the intentional terminal-close request. Bash reports that signal
 		// as a non-zero exit, but the close itself completed cleanly.
 		result.State = StateExited
 		result.ExitCode = 0
