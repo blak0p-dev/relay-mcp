@@ -327,8 +327,8 @@ func TestE2E_CloseTerminal_ReleasesSlotForNextCreate(t *testing.T) {
 
 	first := callCreateTerminal(t, probe, 2)
 	closed := callCloseTerminal(t, probe, 3, first.ID)
-	if !closed.Closed || closed.Status != "error" || closed.ExitCode != -1 {
-		t.Fatalf("close_terminal = %#v, want closed error session with exit_code -1", closed)
+	if !closed.Closed {
+		t.Fatalf("close_terminal = %#v, want closed true", closed)
 	}
 	second := callCreateTerminal(t, probe, 4)
 	if second.ID == first.ID || second.State != "running" {

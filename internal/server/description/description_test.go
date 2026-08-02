@@ -118,3 +118,22 @@ func TestSendControlConstants_DescribeFiniteAllowlist(t *testing.T) {
 		t.Fatalf("SendControlDescription = %q, want finite allowlist and active-session contract", SendControlDescription)
 	}
 }
+
+func TestSendControlDescription_StatesPTYInputContract(t *testing.T) {
+	t.Parallel()
+	for _, phrase := range []string{
+		"raw PTY bytes",
+		"foreground application",
+		"readline",
+		"pending input state",
+		"escape and tab do not guarantee line cancellation",
+		"For Bash specifically",
+		"partial line may remain",
+		"send ctrl+c before an unrelated command",
+		"not a universal guarantee",
+	} {
+		if !strings.Contains(SendControlDescription, phrase) {
+			t.Fatalf("SendControlDescription missing %q; got %q", phrase, SendControlDescription)
+		}
+	}
+}
