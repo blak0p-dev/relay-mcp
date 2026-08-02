@@ -16,7 +16,9 @@ func isPlatformTerminalReadEnd(err error) bool {
 }
 
 func terminateSignal() syscall.Signal {
-	return syscall.SIGTERM
+	// Closing a terminal sends SIGHUP. Bash handles it reliably even while
+	// still initializing its interactive signal handlers.
+	return syscall.SIGHUP
 }
 
 func forceKillSignal() syscall.Signal {

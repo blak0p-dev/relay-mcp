@@ -34,7 +34,7 @@ func TestSessionShutdown_ForceKillsProcessGroupAfterGrace(t *testing.T) {
 		t.Skip("requires a real PTY process group")
 	}
 
-	s, _ := startShutdownTestSession(t, "trap '' TERM; while :; do sleep 1; done & echo $!; wait")
+	s, _ := startShutdownTestSession(t, "trap '' HUP; while :; do sleep 1; done & echo $!; wait")
 	type shutdownResult struct {
 		result CloseResult
 		err    error
@@ -113,6 +113,25 @@ func TestSessionShutdown_ReturnsCleanupErrorWhenGroupSignalFails(t *testing.T) {
 	}
 	if !s.closed.Load() {
 		t.Fatal("Shutdown() left the PTY open after cleanup failure")
+	}
+}
+
+func TestSessionShutdown_HandlesProcessExitBeforeTerminateSignal(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires a real PTY process group")
+	}
+
+	s, _ := startShutdownTestSession(t, "echo 123; exit 0")
+	s.setSignalGroupForTest(func(int, syscall.Signal) error {
+		return syscall.ESRCH
+	})
+
+	result, err := s.Shutdown(100 * time.Millisecond)
+	if err != nil {
+		t.Fatalf("Shutdown() error = %v", err)
+	}
+	if result.State != StateExited || result.ExitCode != 0 {
+		t.Fatalf("Shutdown() result = %#v, want clean exit after process disappeared", result)
 	}
 }
 
